@@ -11,7 +11,7 @@
  * See COPYRIGHT.php for copyright notices and details.
  *
  */
-class SavedControl extends LSActiveRecord {
+class SavedControl extends CActiveRecord {
 		/**
 	 * Returns the table's name
 	 *

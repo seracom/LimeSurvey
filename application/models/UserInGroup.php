@@ -11,7 +11,7 @@
  * See COPYRIGHT.php for copyright notices and details.
  *
  */
-class UserInGroup extends LSActiveRecord {
+class UserInGroup extends CActiveRecord {
 
 	/**
 	 * Returns the static model of Settings table

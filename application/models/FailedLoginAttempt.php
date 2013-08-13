@@ -11,7 +11,7 @@
  * See COPYRIGHT.php for copyright notices and details.
  *
  */
-class FailedLoginAttempt extends LSActiveRecord
+class FailedLoginAttempt extends CActiveRecord
 {
 	/**
 	 * Returns the static model of Settings table

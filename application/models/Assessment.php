@@ -13,7 +13,7 @@
      *	Files Purpose: lots of common functions
 */
 
-class Assessment extends LSActiveRecord
+class Assessment extends CActiveRecord
 {
 	/**
 	 * Returns the static model of Settings table

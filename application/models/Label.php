@@ -13,7 +13,7 @@
  *
  */
 
-class Label extends LSActiveRecord
+class Label extends CActiveRecord
 {
     /**
      * Used for some statistical queries

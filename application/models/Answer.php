@@ -12,7 +12,7 @@
  *
  */
 
-class Answer extends LSActiveRecord
+class Answer extends CActiveRecord
 {
 	/**
 	 * Returns the static model of Settings table
