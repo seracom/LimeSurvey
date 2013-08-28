@@ -66,6 +66,7 @@
             $menu['items']['left'][] = 'separator';
             $menu['items']['left'][] = $this->checkIntegrity();
             $menu['items']['left'][] = $this->dumpDatabase();
+            $menu['items']['left'][] = 'separator';
             $menu['items']['left'][] = $this->editLabels();
             $menu['items']['left'][] = 'separator';
             $menu['items']['left'][] = $this->editTemplates();
@@ -74,13 +75,38 @@
             $menu['items']['left'][] = $this->pluginManager();
 
             $surveys = getSurveyList(true);
-            $surveyList = array();
+            $tmpList = array();
+            $timeadjust = getGlobalSetting('timeadjust');
             foreach ($surveys as $survey)
             {
-                $surveyList[] = array(
+                if($survey['active']!='Y')
+                {
+                    $group = gT("Inactive");
+                    $list = 'inactive';
+                } elseif($survey['expires']!='' && $survey['expires'] < dateShift(date("Y-m-d H:i:s"), "Y-m-d H:i:s", $timeadjust))
+                {
+                    $group = gT("Expired");
+                    $list = 'expired';
+                } else
+                {
+                    $group = gt("Active");
+                    $list = 'active';
+                }        
+                $tmpList[$list][] = array(
                     'id' => $survey['sid'],
-                    'title' => $survey['surveyls_title']
+                    'title' => $survey['surveyls_title'],
+                    'group' => $group                
                 );
+            }
+            $surveyList = array();
+            if (array_key_exists('active', $tmpList)) {
+                $surveyList = array_merge($surveyList, $tmpList['active']);
+            }
+            if (array_key_exists('expired', $tmpList)) {
+                $surveyList = array_merge($surveyList, $tmpList['expired']);
+            }
+            if (array_key_exists('inactive', $tmpList)) {
+                $surveyList = array_merge($surveyList, $tmpList['inactive']);
             }
             $menu['items']['right'][] = array(
                 'title' => 'Surveys:',
@@ -434,7 +460,7 @@
             $result = CHtml::label($item['title'],  $item['name']);
             if (is_array(current($item['values'])))
             {
-                $listData = CHtml::listData($item['values'], 'id', 'title');
+                $listData = CHtml::listData($item['values'], 'id', 'title', 'group');
             }
             else
             {

@@ -32,8 +32,8 @@ class Survey extends LSActiveRecord
      */
     public function expire($surveyId = null)
     {
-        $dateTime = new DateTime('-1 day');
-        $dateTime->add(Yii::app()->getConfig('timeadjust'));
+        $dateTime = dateShift(date("Y-m-d H:i:s"), "Y-m-d H:i:s", Yii::app()->getConfig('timeadjust'));
+        $dateTime = dateShift($dateTime, "Y-m-d H:i:s", '-1 day');
         
         if (!isset($surveyId))
         {
@@ -196,12 +196,13 @@ class Survey extends LSActiveRecord
         $loginID = (int) $loginID;
         $criteria = $this->getDBCriteria();
         $criteria->mergeWith(array(
-            'condition' => 'sid IN (SELECT sid FROM {{permissions}} WHERE uid = :uid AND permission = :permission AND read_p = 1)
+            'condition' => 'sid IN (SELECT entity_id FROM {{permissions}} WHERE entity = :entity AND  uid = :uid AND permission = :permission AND read_p = 1)
                             OR owner_id = :owner_id',
         ));
         $criteria->params[':uid'] = $loginID;
         $criteria->params[':permission'] = 'survey';
         $criteria->params[':owner_id'] = $loginID;
+        $criteria->params[':entity'] = 'survey';
 
         return $this;
     }
