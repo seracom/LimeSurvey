@@ -513,7 +513,7 @@ function getAdminThemeList()
 */
 function getQuestions($surveyid,$gid,$selectedqid)
 {
-    $clang = Yii::app()->lang;
+   $clang = Yii::app()->lang;
     $s_lang = Survey::model()->findByPk($surveyid)->language;
     $qrows = Question::model()->findAllByAttributes(array('sid' => $surveyid, 'gid' => $gid, 'language' => $s_lang, 'parent_qid' => 0),array('order'=>'question_order'));
 
@@ -5544,8 +5544,7 @@ function getAttributeValue($surveyid,$attrName,$token)
     }
     $surveyid=sanitize_int($surveyid);
 
-    TokenDynamic::sid($surveyid);
-    $query=TokenDynamic::model()->find(array("token"=>$token));
+    $query= Token::model(null, $surveyid)->findByAttributes(array("token"=>$token));
 
     $count=$query->count(); // OK  - AR count
     if ($count != 1)
@@ -5746,14 +5745,8 @@ function getNumericalFormat($lang = 'en', $integer = false, $negative = true) {
 */
 function getTokenData($surveyid, $token) 
 {
-    $thistoken = TokenDynamic::model($surveyid)->find('token = :token',array(':token' => $token));
-    $thistokenarray=array(); // so has default value
-    if($thistoken)
-    {
-        $thistokenarray =$thistoken->attributes;
-    }// Did we fill with empty string if not exist ?
-
-    return $thistokenarray;
+    $token = Token::model(null, $surveyid)->findByAttributes(array('token' => $token));
+	return isset($token) ? $token->attributes : array();
 }
 
 /**
@@ -5872,23 +5865,6 @@ function getXMLWriter() {
         $xmlwriter = new XMLWriter();
     }
     return $xmlwriter;
-}
-
-
-/**
-* Returns true when a token can not be used (either doesn't exist, has less then one usage left )
-*
-* @param mixed $tid Token
-*/
-function usedTokens($token, $surveyid)
-{
-    $utresult = true;
-    $query=TokenDynamic::model($surveyid)->findAllByAttributes(array("token"=>$token));
-    if (count($query) > 0) {
-        $row = $query[0];
-        if ($row->usesleft > 0) $utresult = false;
-    }
-    return $utresult;
 }
 
 /**
@@ -6115,6 +6091,7 @@ function includeKeypad()
 */
 function getQuotaInformation($surveyid,$language,$iQuotaID='all')
 {
+	Yii::log('getQuotaInformation');
     global $clienttoken;
     $baselang = Survey::model()->findByPk($surveyid)->language;
     $aAttributes=array('sid' => $surveyid);
@@ -7648,17 +7625,7 @@ function getSurveyUserGroupList($outputformat='htmloptions',$surveyid)
     }
 }
 
-/*
-* Emit the standard (last) onsubmit handler for the survey.
-*
-* This code in injected in the three questionnaire modes right after the <form> element,
-* before the individual questions emit their own onsubmit replacement code.
-* @deprecated 13-07-12
-*/
-function sDefaultSubmitHandler()
-{
-    tracevar("call deprecated sDefaultSubmitHandler");
-}
+
 
 /**
 * This function fixes the group ID and type on all subquestions

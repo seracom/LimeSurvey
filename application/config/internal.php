@@ -48,7 +48,6 @@ $internalConfig = array(
         'user' => array(
             'class' => 'LSWebUser',
         ),
-	
 	)
 );
 

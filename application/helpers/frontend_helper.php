@@ -435,32 +435,27 @@ function submittokens($quotaexit=false)
     $today = dateShift(date("Y-m-d H:i:s"), "Y-m-d H:i", Yii::app()->getConfig("timeadjust"));
 
     // check how many uses the token has left
-    $oTokenInformation = TokenDynamic::model($surveyid)->findByAttributes(array('token' => $clienttoken));
-    if ($oTokenInformation)
-    {
-            $usesleft = $oTokenInformation->usesleft;
-            $participant_id = isset($oTokenInformation->participant_id) ? $oTokenInformation->participant_id : '';
-    }
+    $token = Token::model(null, $surveyid)->findByAttributes(array('token' => $clienttoken));
 
-    if ($quotaexit==true)
+	if ($quotaexit==true)
     {
-        $oTokenInformation->completed = 'Q';
-        $oTokenInformation->usesleft = $oTokenInformation->usesleft-1;
+        $token->completed = 'Q';
+        $token->usesleft--;
     }
     else
     {
-        if (isset($usesleft) && $usesleft<=1)
+        if ($token->usesleft <= 1)
         {
             // Finish the token
             if (isTokenCompletedDatestamped($thissurvey))
             {
-                $oTokenInformation->completed = $today;
+                $token->completed = $today;
             } else {
-                $oTokenInformation->completed = 'Y';
+                $token->completed = 'Y';
             }
-            if(!empty($participant_id))
+            if(isset($token->participant_id))
             {
-                $slquery = SurveyLink::model()->find('participant_id = :pid AND survey_id = :sid AND token_id = :tid', array(':pid'=>$participant_id, ':sid'=>$surveyid, ':tid'=>$oTokenInformation->tid));
+                $slquery = SurveyLink::model()->find('participant_id = :pid AND survey_id = :sid AND token_id = :tid', array(':pid'=> $token->participant_id, ':sid'=>$surveyid, ':tid'=>$token->tid));
                 
                 if (isTokenCompletedDatestamped($thissurvey))
                 {
@@ -472,17 +467,18 @@ function submittokens($quotaexit=false)
                 $slquery->save();
             }
         }
-        $oTokenInformation->usesleft = $oTokenInformation->usesleft-1;
+        $token->usesleft--;
     }
-    $oTokenInformation->save();
+    $token->save();
+
     if ($quotaexit==false)
     {
-        if ($oTokenInformation && trim(strip_tags($thissurvey['email_confirm'])) != "" && $thissurvey['sendconfirmation'] == "Y")
+        if ($token && trim(strip_tags($thissurvey['email_confirm'])) != "" && $thissurvey['sendconfirmation'] == "Y")
         {
-            if($oTokenInformation->completed == "Y" || $oTokenInformation->completed == $today)
+            if($token->completed == "Y" || $token->completed == $today)
             {
                 $from = "{$thissurvey['adminname']} <{$thissurvey['adminemail']}>";
-                $to = $oTokenInformation->email;
+                $to = $token->email;
                 $subject=$thissurvey['email_confirm_subj'];
 
                 $aReplacementVars=array();
@@ -490,8 +486,8 @@ function submittokens($quotaexit=false)
                 $aReplacementVars["ADMINEMAIL"]=$thissurvey['adminemail'];
                 $aReplacementVars['ADMINEMAIL'] = $thissurvey['adminemail'];
                 //Fill with token info, because user can have his information with anonimity control
-                $aReplacementVars["FIRSTNAME"]=$oTokenInformation->firstname;
-                $aReplacementVars["LASTNAME"]=$oTokenInformation->lastname;
+                $aReplacementVars["FIRSTNAME"]=$token->firstname;
+                $aReplacementVars["LASTNAME"]=$token->lastname;
                 $aReplacementVars["TOKEN"]=$clienttoken;
                 // added survey url in replacement vars
                 $surveylink = Yii::app()->createAbsoluteUrl("/survey/index/sid/{$surveyid}",array('lang'=>$_SESSION['survey_'.$surveyid]['s_lang'],'token'=>$clienttoken));
@@ -500,7 +496,7 @@ function submittokens($quotaexit=false)
                 $attrfieldnames=getAttributeFieldNames($surveyid);
                 foreach ($attrfieldnames as $attr_name)
                 {
-                    $aReplacementVars[strtoupper($attr_name)]=$oTokenInformation->$attr_name;
+                    $aReplacementVars[strtoupper($attr_name)] = $token->$attr_name;
                 }
 
                 $dateformatdatat=getDateFormatData($thissurvey['surveyls_dateformat']);
@@ -979,17 +975,14 @@ function buildsurveysession($surveyid,$preview=false)
     !isCaptchaEnabled('surveyaccessscreen',$thissurvey['usecaptcha']))
     {
 
-        //check if tokens actually haven't been already used
-        $areTokensUsed = usedTokens(trim(strip_tags($clienttoken)),$surveyid);
         //check if token actually does exist
         // check also if it is allowed to change survey after completion
         if ($thissurvey['alloweditaftercompletion'] == 'Y' ) {
-            $oTokenEntry = TokenDynamic::model($surveyid)->find('token=:token', array(':token'=>trim(strip_tags($clienttoken))));
+            $oTokenEntry = Token::model(null, $surveyid)->findByAttributes(array('token'=>trim(strip_tags($clienttoken))));
         } else {
-            $oTokenEntry = TokenDynamic::model($surveyid)->find("token=:token AND (completed = 'N' or completed='')", array(':token'=>trim(strip_tags($clienttoken))));
+            $oTokenEntry = Token::model(null, $surveyid)->usable()->incomplete()->findByAttributes(array('token' => $clienttoken));
         }
-
-        if (is_null($oTokenEntry) ||  ($areTokensUsed && $thissurvey['alloweditaftercompletion'] != 'Y') )
+		if (!isset($oTokenEntry))
         {
             //TOKEN DOESN'T EXIST OR HAS ALREADY BEEN USED. EXPLAIN PROBLEM AND EXIT
 
@@ -1010,7 +1003,7 @@ function buildsurveysession($surveyid,$preview=false)
             doFooter();
             exit;
         }
-    }
+   }
     // TOKENS REQUIRED, A TOKEN PROVIDED
     // SURVEY CAPTCHA REQUIRED
     elseif ($tokensexist == 1 && $clienttoken && isCaptchaEnabled('surveyaccessscreen',$thissurvey['usecaptcha']))
@@ -1021,20 +1014,17 @@ function buildsurveysession($surveyid,$preview=false)
         isset($_SESSION['survey_'.$surveyid]['secanswer']) &&
         $loadsecurity == $_SESSION['survey_'.$surveyid]['secanswer'])
         {
-            //check if tokens actually haven't been already used
-            $areTokensUsed = usedTokens(trim(strip_tags($clienttoken)),$surveyid);
-            //check if token actually does exist
-            $oTokenEntry = TokenDynamic::model($surveyid)->find('token=:token', array(':token'=>trim(strip_tags($clienttoken))));
-
             if ($thissurvey['alloweditaftercompletion'] == 'Y' )
             {
-                $oTokenEntry = TokenDynamic::model($surveyid)->find('token=:token', array(':token'=>trim(strip_tags($clienttoken))));
+                $oTokenEntry = Token::model(null, $surveyid)->findByAttributes(array('token'=> $clienttoken));
             }
             else
             {
-                $oTokenEntry = TokenDynamic::model($surveyid)->find("token=:token  AND (completed = 'N' or completed='')", array(':token'=>trim(strip_tags($clienttoken))));
+                $oTokenEntry = Token::model(null, $surveyid)->incomplete()->findByAttributes(array(
+					'token' => $clienttoken
+				));
            }
-            if (is_null($oTokenEntry) || ($areTokensUsed && $thissurvey['alloweditaftercompletion'] != 'Y') )
+            if (!isset($oTokenEntry))
             {
                 sendCacheHeaders();
                 doHeader();
@@ -1875,17 +1865,15 @@ function UpdateGroupList($surveyid, $language)
 */
 function UpdateFieldArray()
 {
-    global $surveyid;
-
-    $clang = Yii::app()->lang;
+	global $surveyid;
+	$clang = Yii::app()->lang;
 
     if (isset($_SESSION['survey_'.$surveyid]['fieldarray']))
     {
-        reset($_SESSION['survey_'.$surveyid]['fieldarray']);
-        while ( list($key) = each($_SESSION['survey_'.$surveyid]['fieldarray']) )
+		foreach ($_SESSION['survey_'.$surveyid]['fieldarray'] as $key => $value)
         {
-            $questionarray =& $_SESSION['survey_'.$surveyid]['fieldarray'][$key];
-
+            $questionarray = &$_SESSION['survey_'.$surveyid]['fieldarray'][$key];
+			Yii::log("test" . print_r($questionarray, true), CLogger::LEVEL_TRACE, 'system.db.CDbCommand');
             $query = "SELECT title, question FROM {{questions}} WHERE qid=".$questionarray[0]." AND language='".$_SESSION['survey_'.$surveyid]['s_lang']."'";
             $usrow = Yii::app()->db->createCommand($query)->queryRow();
             if ($usrow) 
