@@ -2413,6 +2413,7 @@
                                 case 'S': //SHORT FREE TEXT
                                 case 'T': //LONG FREE TEXT
                                 case 'U': //HUGE FREE TEXT
+                                case 'D': //DATE
                                     if ($this->sgqaNaming)
                                     {
                                         $sq_name = '!(' . preg_replace('/\bthis\b/',substr($sq['jsVarName'],4), $em_validation_q) . ')';
@@ -3301,7 +3302,7 @@
                 }
 
                 if (!is_null($rowdivid) || $type == 'L' || $type == 'N' || $type == '!' || !is_null($preg)
-                || $type == 'S' || $type == 'T' || $type == 'U' || $type == '|') {
+                || $type == 'S' || $type == 'D' || $type == 'T' || $type == 'U' || $type == '|') {
                     if (!isset($q2subqInfo[$questionNum])) {
                         $q2subqInfo[$questionNum] = array(
                         'qid' => $questionNum,
@@ -3338,7 +3339,7 @@
                         }
                     }
                     else if ($type == 'N'
-                        || $type == 'S' || $type == 'T' || $type == 'U')    // for $preg
+                        || $type == 'S' || $type == 'D' || $type == 'T' || $type == 'U')    // for $preg
                         {
                             $q2subqInfo[$questionNum]['subqs'][] = array(
                             'varName' => $varName,
@@ -3460,32 +3461,21 @@
             if (isset($_SESSION[$this->sessid]['token']) && $_SESSION[$this->sessid]['token'] != '')
             {
                 //Gather survey data for tokenised surveys, for use in presenting questions
-                $_SESSION[$this->sessid]['thistoken']=getTokenData($surveyid, $_SESSION[$this->sessid]['token']);
-                $this->knownVars['TOKEN:TOKEN'] = array(
+				$this->knownVars['TOKEN:TOKEN'] = array(
                     'code'=>$_SESSION[$this->sessid]['token'],
                     'jsName_on'=>'',
                     'jsName'=>'',
                     'readWrite'=>'N',
                 );
-            }
-            if (isset($_SESSION[$this->sessid]['thistoken']))
-            {
-                foreach (array_keys($_SESSION[$this->sessid]['thistoken']) as $tokenkey)
+				
+				$token = Token::model($surveyid)->findByToken($_SESSION[$this->sessid]['token']);
+                foreach ($token as $key => $val)
                 {
-                    if ($anonymized)
-                    {
-                        $val = "";
-                    }
-                    else
-                    {
-                        $val = $_SESSION[$this->sessid]['thistoken'][$tokenkey];
-                    }
-                    $key = "TOKEN:" . strtoupper($tokenkey);
-                    $this->knownVars[$key] = array(
-                    'code'=>$val,
-                    'jsName_on'=>'',
-                    'jsName'=>'',
-                    'readWrite'=>'N',
+                    $this->knownVars["TOKEN:" . strtoupper($key)] = array(
+						'code' => $anonymized ? '' : $val,
+						'jsName_on' => '',
+						'jsName' => '',
+						'readWrite' => 'N',
                     );
                 }
             }
@@ -3582,10 +3572,10 @@
             $grel = (isset($_SESSION[$LEM->sessid]['relevanceStatus']['G' . $gseq]) ? $_SESSION[$LEM->sessid]['relevanceStatus']['G' . $gseq] : 1);   // group-level relevance based upon grelevance equation
             return ($grel && $qrel);
         }
-        
+
         /**
          * Returns true if the group is relevant and should be shown
-         * 
+         *
          * @param int $gid
          * @return boolean
          */
@@ -4224,6 +4214,7 @@
                     while (true)
                     {
                         $LEM->currentQset = array();    // reset active list of questions
+                        if (is_null($LEM->currentGroupSeq)) {$LEM->currentGroupSeq=0;} // If moving backwards in preview mode and a question was removed then $LEM->currentGroupSeq is NULL and an endless loop occurs.
                         if (--$LEM->currentGroupSeq < 0)
                         {
                             $message .= $LEM->_UpdateValuesInDatabase($updatedValues,false);
@@ -4616,7 +4607,7 @@
                     'interviewtime'=>0
                     );
                     switchMSSQLIdentityInsert("survey_{$this->sid}_timings", true);
-                    $iNewID = $oSurveyTimings->insertRecords($tdata); 
+                    $iNewID = $oSurveyTimings->insertRecords($tdata);
                     switchMSSQLIdentityInsert("survey_{$this->sid}_timings", false);
                 }
             }
@@ -4693,7 +4684,7 @@
                     $query .= $_SESSION[$this->sessid]['srid'];
 
                     if (!dbExecuteAssoc($query))
-                    {                 
+                    {
                         echo submitfailed('');  // TODO - report SQL error?
 
                         if (($this->debugLevel & LEM_DEBUG_VALIDATION_SUMMARY) == LEM_DEBUG_VALIDATION_SUMMARY) {
@@ -6529,6 +6520,7 @@
                         {
                             case 'N':
                             case 'S':
+                            case 'D':
                             case 'T':
                             case 'U':
                                 $valParts[] = "\n  if(isValidOther" . $arg['qid'] . "){\n";
@@ -7380,7 +7372,7 @@ EOD;
             ." c.cqid = 0 and c.qid = q.qid";
 
             $databasetype = Yii::app()->db->getDriverName();
-            if ($databasetype=='mssql')
+            if ($databasetype=='mssql' || $databasetype=='dblib')
             {
                 $query .= " order by sid, c.qid, scenario, cqid, cfieldname, value";
             }
@@ -7662,7 +7654,7 @@ EOD;
                     'grelevance' => (!($this->sPreviewMode=='question' || $this->sPreviewMode=='group')) ? $d['grelevance']:1,
                  );
                 $qinfo[$_order] = $gid[$d['gid']];
-                ++$_order;                    
+                ++$_order;
             }
             if (isset($_SESSION['survey_'.$surveyid]) && isset($_SESSION['survey_'.$surveyid]['grouplist'])) {
                 $_order=0;
@@ -8231,7 +8223,7 @@ EOD;
             // End Message
 
             $LEM =& LimeExpressionManager::singleton();
-            
+
             $aSurveyInfo=getSurveyInfo($sid);
 
             $allErrors = array();
@@ -8829,6 +8821,7 @@ EOD;
             'other_replace_text',
             'page_break',
             'prefix',
+            'printable_help',
             'public_statistics',
             'random_group',
             'random_order',
@@ -8963,6 +8956,8 @@ EOD;
 
                         $row = array();
                         $row['class'] = 'G';
+                        //create a group code to allow proper importing of multi-lang survey TSVs
+                        $row['type/scale']='G'.$gseq;
                         $row['name'] = $ginfo['group_name'];
                         $row['relevance'] = $grelevance;
                         $row['text'] = $gtext;
@@ -9151,7 +9146,7 @@ EOD;
                             }
                             $row['type/scale'] = $_scale;
                             $row['name'] = $ansInfo[1];
-                            $row['relevance'] = $valInfo[0];    // TODO - true? - what if it isn't an assessment value?
+                            $row['relevance'] = $assessments==true ? $valInfo[0] : '';
                             $row['text'] = $valInfo[1];
                             $row['language'] = $lang;
                             $rows[] = $row;
@@ -9175,15 +9170,15 @@ EOD;
             }
             return $out;
         }
-        
-        /** 
+
+        /**
         * Returns the survey ID of the EM singleton
         */
         public static function getLEMsurveyId() {
                 $LEM =& LimeExpressionManager::singleton();
                 return $LEM->sid;
-        }  
-        
+        }
+
     }
 
     /**
@@ -9208,6 +9203,6 @@ EOD;
         }
         return ($a['qseq'] < $b['qseq']) ? -1 : 1;
     }
-  
-  
+
+
 ?>

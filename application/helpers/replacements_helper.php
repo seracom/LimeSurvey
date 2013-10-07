@@ -403,38 +403,7 @@ function templatereplace($line, $replacements = array(), &$redata = array(), $de
     }
     if (isset($thissurvey['allowsave']) and $thissurvey['allowsave'] == "Y")
     {
-        // Find out if the user has any saved data
-        if ($thissurvey['format'] == 'A')
-        {
-            if ($thissurvey['tokenanswerspersistence'] != 'Y' || !isset($surveyid) || !tableExists('tokens_'.$surveyid))
-            {
-                $_saveall = "\t\t\t<input type='button' name='loadall' value='" . $clang->gT("Load unfinished survey") . "' class='saveall button' onclick=\"javascript:addHiddenField(document.getElementById('limesurvey'),'loadall',this.value);document.getElementById('limesurvey').submit();\" " . (($thissurvey['active'] != "Y") ? "disabled='disabled'" : "") . "/>"
-                . "\n\t\t\t<input type='button' name='saveallbtn' value='" . $clang->gT("Resume later") . "' class='saveall button' onclick=\"javascript:document.limesurvey.move.value = this.value;addHiddenField(document.getElementById('limesurvey'),'saveall',this.value);document.getElementById('limesurvey').submit();\" " . (($thissurvey['active'] != "Y") ? "disabled='disabled'" : "") . "/>";  // Show Save So Far button
-            }
-            else
-            {
-                $_saveall = "\t\t\t<input type='button' name='saveallbtn' value='" . $clang->gT("Resume later") . "' class='saveall button' onclick=\"javascript:document.limesurvey.move.value = this.value;addHiddenField(document.getElementById('limesurvey'),'saveall',this.value);document.getElementById('limesurvey').submit();\" " . (($thissurvey['active'] != "Y") ? "disabled='disabled'" : "") . "/>";  // Show Save So Far button
-            };
-        }
-        elseif (isset($surveyid) && (!isset($_SESSION['survey_'.$surveyid]['step']) || !$_SESSION['survey_'.$surveyid]['step']))
-        {  //First page, show LOAD
-            if ($thissurvey['tokenanswerspersistence'] != 'Y' || !isset($surveyid) || !tableExists('tokens_'.$surveyid))
-            {
-                $_saveall = "\t\t\t<input type='button' name='loadall' value='" . $clang->gT("Load unfinished survey") . "' class='saveall button' onclick=\"javascript:addHiddenField(document.getElementById('limesurvey'),'loadall',this.value);document.getElementById('limesurvey').submit();\" " . (($thissurvey['active'] != "Y") ? "disabled='disabled'" : "") . "/>";
-            }
-            else
-            {
-                $_saveall = '';
-            }
-        }
-        elseif (isset($surveyid) && isset($_SESSION['survey_'.$surveyid]['scid']) && (isset($move) && $move == "movelast"))
-        {  //Already saved and on Submit Page, dont show Save So Far button
-            $_saveall = '';
-        }
-        else
-        {
-            $_saveall = "<input type='button' name='saveallbtn' value='" . $clang->gT("Resume later") . "' class='saveall button' onclick=\"javascript:document.limesurvey.move.value = this.value;addHiddenField(document.getElementById('limesurvey'),'saveall',this.value);document.getElementById('limesurvey').submit();\" " . (($thissurvey['active'] != "Y") ? "disabled='disabled'" : "") . "/>";  // Show Save So Far button
-        }
+        $_saveall = doHtmlSaveAll(isset($move)?$move:NULL);
     }
     else
     {
@@ -846,43 +815,6 @@ EOD;
 
 }
 
-/**
-* insertAnsReplace() takes a string and looks for any {INSERTANS:xxxx} variables
-*  which it then, one by one, substitutes the SGQA code with the relevant answer
-*  from the session array containing responses
-*
-*  The operations of this function were previously in the templatereplace function
-*  but have been moved to a function of their own to make it available
-*  to other areas of the script.
-*
-* @param mixed $line   string - the string to iterate, and then return
-*
-* @return string This string is returned containing the substituted responses
-*
-*/
-function insertansReplace($line)
-{
-    return $line;
-}
-
-/**
-* tokenReplace() takes a string and looks for any {TOKEN:xxxx} variables
-*  which it then, one by one, substitutes the TOKEN code with the relevant token
-*  from the session array containing token information
-*
-*  The operations of this function were previously in the templatereplace function
-*  but have been moved to a function of their own to make it available
-*  to other areas of the script.
-*
-* @param mixed $line   string - the string to iterate, and then return
-*
-* @return string This string is returned containing the substituted responses
-*
-*/
-function tokenReplace($line)
-{
-    return $line;
-}
 
 // This function replaces field names in a text with the related values
 // (e.g. for email and template functions)
@@ -942,10 +874,51 @@ function PassthruReplace($line, $thissurvey)
     return $line;
 }
 
-function dTexts__run($text,$questionNum=NULL)
+/**
+* doHtmlSaveAll return HTML part of saveall button in survey
+**/
+function doHtmlSaveAll($move="")
 {
-    //    return LimeExpressionManager::ProcessString($text,$questionNum,NULL,true);
-    return $text;
+    $surveyid=Yii::app()->getConfig('surveyID');
+    $thissurvey=getsurveyinfo($surveyid);
+    $clang = Yii::app()->lang;
+    $aHtmlOptionsLoadall=array('type'=>'submit','id'=>'loadallbtn','value'=>'loadall','name'=>'loadall','class'=>"saveall submit button");
+    $aHtmlOptionsSaveall=array('type'=>'submit','id'=>'saveallbtn','value'=>'saveall','name'=>'saveall','class'=>"saveall submit button");
+    if($thissurvey['active'] != "Y"){
+        $aHtmlOptionsLoadall['disabled']='disabled';
+        $aHtmlOptionsSaveall['disabled']='disabled';
+    }
+    $_saveall="";
+    // Find out if the user has any saved data
+    if ($thissurvey['format'] == 'A')
+    {
+        if ($thissurvey['tokenanswerspersistence'] != 'Y' || !isset($surveyid) || !tableExists('tokens_'.$surveyid))
+        {
+            $_saveall .= CHtml::htmlButton($clang->gT("Load unfinished survey"),$aHtmlOptionsLoadall);
+        }
+        $_saveall .= CHtml::htmlButton($clang->gT("Resume later"),$aHtmlOptionsSaveall);
+    }
+    elseif ($surveyid && (!isset($_SESSION['survey_'.$surveyid]['step']) || !$_SESSION['survey_'.$surveyid]['step']))//First page, show LOAD (but not save)
+    {  
+        if ($thissurvey['tokenanswerspersistence'] != 'Y' || !isset($surveyid) || !tableExists('tokens_'.$surveyid))
+        {
+            $_saveall .= CHtml::htmlButton($clang->gT("Load unfinished survey"),$aHtmlOptionsLoadall);
+        }
+    }
+    elseif ($surveyid && (isset($_SESSION['survey_'.$surveyid]['maxstep']) && $_SESSION['survey_'.$surveyid]['maxstep']==1) && $thissurvey['showwelcome']=="N")//First page, show LOAD and SAVE
+    {  //First page, show LOAD
+        if ($thissurvey['tokenanswerspersistence'] != 'Y' || !isset($surveyid) || !tableExists('tokens_'.$surveyid))
+        {
+            $_saveall .= CHtml::htmlButton($clang->gT("Load unfinished survey"),$aHtmlOptionsLoadall);
+        }
+        $_saveall .= CHtml::htmlButton($clang->gT("Resume later"),$aHtmlOptionsSaveall);
+    }
+    elseif (!isset($_SESSION['survey_'.$surveyid]['scid']) || $move == "movelast") // Not on last page or submited survey
+    {
+        $_saveall .= CHtml::htmlButton($clang->gT("Resume later"),$aHtmlOptionsSaveall);
+    }
+    $_saveall="";
+    return $_saveall;
 }
 
 // Closing PHP tag intentionally omitted - yes, it is okay

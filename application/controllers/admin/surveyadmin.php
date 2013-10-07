@@ -527,14 +527,12 @@ class SurveyAdmin extends Survey_Common_Action
     * @param int $iSurveyID
     * @return void
     */
-    public function ajaxowneredit($newowner, $iSurveyID)
+    public function ajaxowneredit()
     {
         header('Content-type: application/json');
-
-        $intNewOwner = sanitize_int($newowner);
-        $intSurveyId = sanitize_int($iSurveyID);
+        $intNewOwner = sanitize_int(Yii::app()->request->getPost("newowner"));
+        $intSurveyId = sanitize_int(Yii::app()->request->getPost("surveyid"));
         $owner_id = Yii::app()->session['loginID'];
-
         $query_condition = 'sid=:sid';
         $params[':sid']=$intSurveyId;
         if (!Permission::model()->hasGlobalPermission('superadmin','create'))
@@ -676,9 +674,9 @@ class SurveyAdmin extends Survey_Common_Action
                 $aSurveyEntry['viewurl'] = $this->getController()->createUrl("/admin/survey/sa/view/surveyid/" . $rows['sid']);
                 if (tableExists('tokens_' . $rows['sid'] ))
                 {
-                    $cntResult = TokenDynamic::countAllAndCompleted($rows['sid']);
-                    $tokens = $cntResult['cntall'];
-                    $tokenscompleted = $cntResult['cntcompleted'];
+					$summary = Token::model($rows['sid'])->summary();
+                    $tokens = $summary['count'];
+                    $tokenscompleted = $summary['completed'];
 
                     $aSurveyEntry[] = $tokens;
                     $aSurveyEntry[] = ($tokens == 0) ? 0 : round($tokenscompleted / $tokens * 100, 1);

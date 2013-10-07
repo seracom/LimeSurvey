@@ -5,6 +5,7 @@
  * Do not change these unless you know what you are doing.
  * 
  */
+date_default_timezone_set('UTC');
 $internalConfig = array(
 	'basePath' => dirname(dirname(__FILE__)),
 	'runtimePath' => dirname(dirname(dirname(__FILE__))).DIRECTORY_SEPARATOR.'tmp'.DIRECTORY_SEPARATOR.'runtime',
@@ -38,16 +39,17 @@ $internalConfig = array(
             'class'=>'LSHttpRequest',
             'noCsrfValidationRoutes'=>array(
 //              '^services/wsdl.*$'   // Set here additional regex rules for routes not to be validate
-                '^.*_json$',
                 'remotecontrol'
             ),
             'enableCsrfValidation'=>true,    // CSRF protection
             'enableCookieValidation'=>false   // Enable to activate cookie protection
         ),
-
         'user' => array(
             'class' => 'LSWebUser',
         ),
+		'log' => array(
+			'class' => 'CLogRouter'
+		)
 	)
 );
 

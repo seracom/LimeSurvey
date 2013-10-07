@@ -8,14 +8,47 @@ $(document).ready(function(){
         language=$('#datelanguage'+basename).val();
         datemin=$('#datemin'+basename).val();
         datemax=$('#datemax'+basename).val();
-        $(e).datepicker({ dateFormat: format,
+        
+        $(e).datetimepicker({ dateFormat: format,
             showOn: 'both',
             changeYear: true,
             changeMonth: true,
             defaultDate: +0,
             beforeShow: customRange,
-            duration: 'fast'
-            }, $.datepicker.regional[language]);
+            closeText: "OK",
+            // TODO: set the following options according to what components of the picker are needed
+            // date vs. date/time vs. time
+                showTimepicker: false,
+                timeOnly: false,
+                showButtonPanel: false,
+                //need this to close datetimepicker on selection of a date (mimics date picker)
+                onSelect: function () { 
+                    $('#answer'+basename).datetimepicker("hide");
+                },
+            
+            firstDay: "1",
+            duration: 'fast',
+            // Validate input. Necessary because datepicker also allows keyboard entry.
+            onClose: function() {
+                format=$('#dateformat'+basename).val();
+                answer=$('#answer'+basename).val();
+                //only validate if the format mask says it's a complete date and only a date
+                var str_regexp = /^[mydMYD]{1,4}[-.\s\/][mydMYD]{1,4}[-.\/\s][mydMYD]{1,4}$/; 
+                var pattern = new RegExp(str_regexp); 
+                if (format.match(pattern)!=null)
+                {
+                    try
+                    {
+                        newvalue=jQuery.datepicker.parseDate(format, answer);
+                    }
+                    catch(error)
+                    {
+                        alert('Date entered is invalid!');
+                        $('#answer'+basename).val("");
+                    }
+                }
+            },
+        }, $.datepicker.regional[language]);
     });
 
     // dropdown dates
@@ -39,7 +72,6 @@ function customRange(input)
             maxDate: new Date(Date.parse(datemax.substr(0,10))),
     };
 }
-
 
 function dateUpdater() {
 
@@ -101,7 +133,7 @@ function dateUpdater() {
             {
                 iMonth=$('#month'+thisid).val(); 
             }
-            if ($('#month'+thisid).size()==0)
+            if ($('#day'+thisid).size()==0)
             {
                 iDay='01';
             }

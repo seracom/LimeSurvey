@@ -15,6 +15,7 @@
         {
             $rules = array(
                 array('allow', 'roles' => array('administrator')),
+				array('allow', 'actions' => array('direct')),
                 array('deny')
             );
 
@@ -29,7 +30,6 @@
             
             // Scan the plugins folder.
             $discoveredPlugins = $pluginManager->scanPlugins();
-            
             $installedPlugins = $pluginManager->getInstalledPlugins();
             $installedNames = array_map(function ($installedPlugin) { return $installedPlugin->name; }, $installedPlugins);
 
@@ -51,11 +51,13 @@
             {
                 /* @var $plugin Plugin */
                 if (array_key_exists($plugin->name, $discoveredPlugins)) {
+                    $pluginSettings = App()->getPluginManager()->loadPlugin($plugin->name, $plugin->id)->getPluginSettings(false);
                     $data[] = array(
                         'id' => $plugin->id,
                         'name' => $discoveredPlugins[$plugin->name]['pluginName'],
                         'description' => $discoveredPlugins[$plugin->name]['description'],
                         'active' => $plugin->active,
+                        'settings'=>$pluginSettings,
                         'new' => !in_array($plugin->name, $installedNames)
                     );
                 } else {
@@ -112,6 +114,28 @@
             $this->redirect(array('plugins/'));
         }
 
+		public function actionDirect($plugin, $function)
+		{
+			$event = new PluginEvent('newDirectRequest');
+			// The intended target of the call.
+			$event->set('target', $plugin);
+			// The name of the function.
+			$event->set('function', $function);
+			$event->set('request', App()->request);
+
+			App()->getPluginManager()->dispatchEvent($event);
+			
+			$out = '';
+			foreach($event->getAllContent() as $content)
+			{
+				$out .= $content->getContent();
+			}
+
+			if (!empty($out))
+			{
+				$this->renderText($out);
+			}
+		}
          public function actionConfigure($id)
          {
              $plugin = Plugin::model()->findByPk($id)->attributes;
@@ -134,7 +158,7 @@
 				}
 				$pluginObject->saveSettings($save);
 				Yii::app()->user->setFlash('pluginmanager', 'Settings saved');
-             }                
+             }
              
              $settings =  $pluginObject->getPluginSettings();
              if (empty($settings)) {

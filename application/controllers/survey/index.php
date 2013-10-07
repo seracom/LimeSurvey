@@ -47,7 +47,7 @@ class index extends CAction {
         $surveyid = $param['sid'];
         Yii::app()->setConfig('surveyID',$surveyid);
         $thisstep = $param['thisstep'];
-        $move = $param['move'];
+        $move=getMove();
         $clienttoken = $param['token'];
         $standardtemplaterootdir = Yii::app()->getConfig('standardtemplaterootdir');
         if (is_null($thissurvey) && !is_null($surveyid)) $thissurvey = getSurveyInfo($surveyid);
@@ -72,20 +72,24 @@ class index extends CAction {
 
         if ( $this->_isClientTokenDifferentFromSessionToken($clienttoken,$surveyid) )
         {
+            $sReloadUrl=$this->getController()->createUrl("/survey/index/sid/{$surveyid}",array('token'=>$clienttoken,'lang'=>$clang->langcode,'newtest'=>'Y'));
             $asMessage = array(
             $clang->gT('Token mismatch'),
             $clang->gT('The token you provided doesn\'t match the one in your session.'),
-            $clang->gT('Please wait to begin with a new session.')
+            "<a class='reloadlink newsurvey' href={$sReloadUrl}>".$clang->gT("Click here to start the survey.")."</a>"
             );
             $this->_createNewUserSessionAndRedirect($surveyid, $redata, __LINE__, $asMessage);
         }
 
         if ( $this->_isSurveyFinished($surveyid) )
         {
+            $aReloadUrlParam=array('lang'=>$clang->langcode,'newtest'=>'Y');
+            if($clienttoken){$aReloadUrlParam['token']=$clienttoken;}
+            $sReloadUrl=$this->getController()->createUrl("/survey/index/sid/{$surveyid}",$aReloadUrlParam);
             $asMessage = array(
             $clang->gT('Previous session is set to be finished.'),
             $clang->gT('Your browser reports that it was used previously to answer this survey. We are resetting the session so that you can start from the beginning.'),
-            $clang->gT('Please wait to begin with a new session.')
+            "<a class='reloadlink newsurvey' href={$sReloadUrl}>".$clang->gT("Click here to start the survey.")."</a>"
             );
             $this->_createNewUserSessionAndRedirect($surveyid, $redata, __LINE__, $asMessage);
         }
@@ -189,7 +193,7 @@ class index extends CAction {
             AND ((expires >= '".date("Y-m-d H:i")."') OR (expires is null))
             AND ((startdate <= '".date("Y-m-d H:i")."') OR (startdate is null))
             ORDER BY surveyls_title";
-            $result = dbExecuteAssoc($query,false,true) or safeDie("Could not connect to database. If you try to install LimeSurvey please refer to the <a href='http://docs.limesurvey.org'>installation docs</a> and/or contact the system administrator of this webpage."); //Checked
+            $result = dbExecuteAssoc($query,false,true) or safeDie("Could not connect to database. If you try to install LimeSurvey please refer to the <a href='http://manual.limesurvey.org'>installation docs</a> and/or contact the system administrator of this webpage."); //Checked
             $list=array();
 
             foreach($result->readAll() as $rows)
@@ -393,7 +397,7 @@ class index extends CAction {
             $this->_niceExit($redata, __LINE__, $thissurvey['templatedir'], $asMessage);
         }
 
-        if (returnGlobal('loadname',true)=="reload")
+        if (returnGlobal('loadall',true)=="reload") // Used if reload is done by URL (GET)
         {
             $_POST['loadall']="reload";
         }
@@ -458,14 +462,14 @@ class index extends CAction {
         // bypass only this check at first page (Step=0) because
         // this check is done in buildsurveysession and error message
         // could be more interresting there (takes into accound captcha if used)
-        if ($tokensexist == 1 && isset($token) && $token &&
+		if ($tokensexist == 1 && isset($token) && $token &&
         isset($_SESSION['survey_'.$surveyid]['step']) && $_SESSION['survey_'.$surveyid]['step']>0 && tableExists("tokens_{$surveyid}}}"))
         {
             // check also if it is allowed to change survey after completion
-            if ($thissurvey['alloweditaftercompletion'] == 'Y' ) {
-				$tokenInstance = Token::model(null, $surveyid)->findByAttributes(array('token' => $token));
+			if ($thissurvey['alloweditaftercompletion'] == 'Y' ) {
+				$tokenInstance = Token::model($surveyid)->findByAttributes(array('token' => $token));
             } else {
-				$tokenInstance = Token::model(null, $surveyid)->usable()->incomplete()->findByAttributes(array('token' => $token));
+				$tokenInstance = Token::model($surveyid)->usable()->incomplete()->findByAttributes(array('token' => $token));
             }
 
 			if (!isset($tokenInstance) && !$previewmode)
@@ -490,10 +494,9 @@ class index extends CAction {
         {
             // check also if it is allowed to change survey after completion
             if ($thissurvey['alloweditaftercompletion'] == 'Y' ) {
-				$tokenInstance = Token::model(null, $surveyid)->usable()->findByAttributes(array('token' => $token));
+                $tokenInstance = Token::model($surveyid)->editable()->findByAttributes(array('token' => $token));
             } else {
-				$tokenInstance = Token::model(null, $surveyid)->usable()->incomplete()->findByAttributes(array('token' => $token));
-
+                $tokenInstance = Token::model($surveyid)->usable()->incomplete()->findByAttributes(array('token' => $token));
             }
             if (!isset($tokenInstance))
             {
@@ -609,17 +612,17 @@ class index extends CAction {
         if (!isset($_SESSION['survey_'.$surveyid]['srid']) && $thissurvey['anonymized'] == "N" && $thissurvey['active'] == "Y" && isset($token) && $token !='')
         {
             // load previous answers if any (dataentry with nosubmit)
-            $sQuery="SELECT id,submitdate,lastpage FROM {$thissurvey['tablename']} WHERE {$thissurvey['tablename']}.token='{$token}' order by id desc";
-            $aRow = Yii::app()->db->createCommand($sQuery)->queryRow();
-            if ( $aRow )
+            //$oSurveyTokenInstance=SurveyDynamic::model($surveyid)->find(array('select'=>'id,submitdate,lastpage', 'condition'=>'token=:token', 'order'=>'id DESC','params'=>array('token' => $token)));
+            $oSurveyTokenInstance=SurveyDynamic::model($surveyid)->find(array('condition'=>'token=:token', 'order'=>'id DESC','params'=>array('token' => $token)));
+            if ( $oSurveyTokenInstance )
             {
-                if(($aRow['submitdate']==''  && $thissurvey['tokenanswerspersistence'] == 'Y' )|| ($aRow['submitdate']!='' && $thissurvey['alloweditaftercompletion'] == 'Y'))
+                if((empty($oSurveyTokenInstance->submitdate) || $thissurvey['alloweditaftercompletion'] == 'Y' ) && $thissurvey['tokenanswerspersistence'] == 'Y')
                 {
-                    $_SESSION['survey_'.$surveyid]['srid'] = $aRow['id'];
-                    if (!is_null($aRow['lastpage']) && $aRow['submitdate']=='')
+                    $_SESSION['survey_'.$surveyid]['srid'] = $oSurveyTokenInstance->id;
+                    if (!empty($oSurveyTokenInstance->lastpage) && empty($oSurveyTokenInstance->submitdate))
                     {
                         $_SESSION['survey_'.$surveyid]['LEMtokenResume'] = true;
-                        $_SESSION['survey_'.$surveyid]['step'] = $aRow['lastpage'];
+                        $_SESSION['survey_'.$surveyid]['step'] = $oSurveyTokenInstance->lastpage;
                     }
                 }
                 buildsurveysession($surveyid);
@@ -688,9 +691,9 @@ class index extends CAction {
 
     function _loadLimesurveyLang($mvSurveyIdOrBaseLang)
     {
-        if ( is_int($mvSurveyIdOrBaseLang))
+        if ( is_numeric($mvSurveyIdOrBaseLang) && Survey::model()->find($mvSurveyIdOrBaseLang))
         {
-            $baselang = Survey::model()->findByPk($surveyId)->language;
+            $baselang = Survey::model()->find($mvSurveyIdOrBaseLang)->language;
         }
         elseif (!empty($mvSurveyIdOrBaseLang))
         {

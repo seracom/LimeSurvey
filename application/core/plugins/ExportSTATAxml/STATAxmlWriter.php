@@ -489,9 +489,9 @@ class STATAxmlWriter extends Writer
                 $typelist[$variable]['type'] = 'long';
                 $typelist[$variable]['format'] = '%10.0g';
             }
-            elseif (in_array('integer', $responses, true))
+            elseif (in_array('int', $responses, true))
             {
-                $typelist[$variable]['type'] = 'integer';
+                $typelist[$variable]['type'] = 'int';
                 $typelist[$variable]['format'] = '%10.0g';
             }
             elseif (in_array('byte', $responses, true))
@@ -501,8 +501,8 @@ class STATAxmlWriter extends Writer
             }
             elseif (in_array('emptystr', $responses, true))
             {
-                $typelist[$variable]['type'] = 'str1'; //variables that only contain '' as responses will be a short string...
-                $typelist[$variable]['format'] = '%1s';
+                $typelist[$variable]['type'] = 'byte'; //variables that only contain '' as responses will be a byte...
+                $typelist[$variable]['format'] = '%9.0g';
             }
             $this->customFieldmap['questions'][$variable]['statatype']   = $typelist[$variable]['type'];
             $this->customFieldmap['questions'][$variable]['stataformat'] = $typelist[$variable]['format'];

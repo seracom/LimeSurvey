@@ -22,7 +22,6 @@
  * to determine whether the results of a certain question should be shown to the user
  * after he/she has submitted the survey.
  *
- * See http://docs.limesurvey.org/tiki-index.php?page=Question+attributes#public_statistics
  */
 
 class Statistics_userController extends LSYii_Controller {
@@ -171,10 +170,10 @@ class Statistics_userController extends LSYii_Controller {
 		 * only show questions where question attribute "public_statistics" is set to "1"
 		 */
 
-        $query = "SELECT q.* , group_name, group_order FROM {{questions}} q, {{groups}} g, {{question_attributes}} qa 
+        $query = "SELECT q.* , group_name, group_order FROM {{questions}} q, {{groups}} g, {{question_attributes}} qa
                     WHERE g.gid = q.gid AND g.language = :lang1 AND q.language = :lang2 AND q.sid = :surveyid AND q.qid = qa.qid AND q.parent_qid = 0 AND qa.attribute = 'public_statistics'";
         $databasetype = Yii::app()->db->getDriverName();
-        if ($databasetype=='mssql' || $databasetype=="sqlsrv")
+        if ($databasetype=='mssql' || $databasetype=="sqlsrv" || $databasetype=="dblib")
         {
             $query .=" AND CAST(CAST(qa.value as varchar) as int)='1'\n";
         }
@@ -359,7 +358,7 @@ class Statistics_userController extends LSYii_Controller {
 		}// end if -> for removing the error message in case there are no filters
 		$summary = $allfields;
 
-        
+
         // Get the survey inforamtion
         $thissurvey = getSurveyInfo($surveyid,$language);
 
@@ -372,8 +371,8 @@ class Statistics_userController extends LSYii_Controller {
         {
             $data['sTemplatePath'] = validateTemplateDir($thissurvey['templatedir']);
         }
-        
-        
+
+
 		//---------- CREATE STATISTICS ----------
         $redata = compact(array_keys(get_defined_vars()));
         doHeader();

@@ -159,7 +159,7 @@ class RegisterController extends LSYii_Controller {
         $postattribute2=sanitize_xss_string(strip_tags(returnGlobal('register_attribute2')));   */
 
         // Insert new entry into tokens db
-        $token = new Token('insert', $thissurvey['sid']);
+		$token = Token::create($thissurvey['sid']);
         $token->firstname = $postfirstname;
         $token->lastname = $postlastname;
         $token->email = Yii::app()->request->getPost('register_email');
@@ -191,7 +191,12 @@ class RegisterController extends LSYii_Controller {
         $fieldsarray["{FIRSTNAME}"]=$postfirstname;
         $fieldsarray["{LASTNAME}"]=$postlastname;
         $fieldsarray["{EXPIRY}"]=$thissurvey["expiry"];
+        $fieldsarray["{TOKEN}"]=$token->token;
+        $fieldsarray["{EMAIL}"]=$token->email;
 
+        $token=$token->token;
+        
+        
         $message=$thissurvey['email_register'];
         $subject=$thissurvey['email_register_subj'];
 

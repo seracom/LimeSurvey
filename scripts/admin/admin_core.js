@@ -729,3 +729,31 @@ function tableCellAdapters()
     });
 }
 
+/**
+ * sendPost : create a form, fill with param and submit
+ *
+ * @param {string} action
+ * @param {} checkcode : deprecated
+ * @param {array} arrayparam
+ * @param {array} arrayval
+ *
+ */
+function sendPost(myaction,checkcode,arrayparam,arrayval)
+{
+    var $form = $("<form method='POST'>").attr("action", myaction);
+    for (var i = 0; i < arrayparam.length; i++)
+        $("<input type='hidden'>").attr("name", arrayparam[i]).attr("value", arrayval[i]).appendTo($form);
+    if(typeof csrfToken =="string")
+        $("<input type='hidden'>").attr("name", 'YII_CSRF_TOKEN').attr("value", csrfToken).appendTo($form);
+    $form.appendTo("body");
+    $form.submit();
+}
+function addHiddenElement(theform,thename,thevalue)
+{
+    var myel = document.createElement('input');
+    myel.type = 'hidden';
+    myel.name = thename;
+    theform.appendChild(myel);
+    myel.value = thevalue;
+    return myel;
+}

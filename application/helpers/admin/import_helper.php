@@ -3493,6 +3493,33 @@ function XMLImportSurvey($sFullFilepath,$sXMLdata=NULL,$sNewSurveyName=NULL,$iDe
             $insertdata['showxquestions']=$insertdata['showXquestions'];
             unset($insertdata['showXquestions']);
         }
+        if (isset($insertdata['googleAnalyticsStyle']))
+        {
+            $insertdata['googleanalyticsstyle']=$insertdata['googleAnalyticsStyle'];
+            unset($insertdata['googleAnalyticsStyle']);
+        }
+        if (isset($insertdata['googleAnalyticsAPIKey']))
+        {
+            $insertdata['googleanalyticsapikey']=$insertdata['googleAnalyticsAPIKey'];
+            unset($insertdata['googleAnalyticsAPIKey']);
+        }
+        if (isset($insertdata['allowjumps'])) 
+        {
+            if( $insertdata['allowjumps']=="Y")
+                $insertdata['questionindex 	']=1; // 0 is default then need only Y
+            unset($insertdata['allowjumps']);
+        }
+        /* Remove unknow column */
+        $aSurveyModelsColumns=Survey::model()->attributes;
+        $aSurveyModelsColumns['wishSID']=null;// To force a sid surely
+        $aBadData=array_diff_key($insertdata, $aSurveyModelsColumns);
+        $insertdata=array_intersect_key ($insertdata,$aSurveyModelsColumns);
+        // Fill a optionnal array of error
+        foreach($aBadData as $key=>$value)
+        {
+            $results['importwarnings'][]=sprintf($clang->gT("This survey setting has not been imported: %s => %s"),$key,$value);
+        }
+        
         $iNewSID = $results['newsid'] = Survey::model()->insertNewSurvey($insertdata) or safeDie($clang->gT("Error").": Failed to insert data [1]<br />");
 
         $results['surveys']++;
@@ -4058,7 +4085,7 @@ function XMLImportTokens($sFullFilepath,$iSurveyID,$sCreateMissingAttributeField
     }
 
     switchMSSQLIdentityInsert('tokens_'.$iSurveyID,true);
-    foreach ($xml->tokens->rows->row as $row)
+	foreach ($xml->tokens->rows->row as $row)
     {
         $insertdata=array();
 
@@ -4067,9 +4094,9 @@ function XMLImportTokens($sFullFilepath,$iSurveyID,$sCreateMissingAttributeField
             $insertdata[(string)$key]=(string)$value;
         }
 
-		$token = new Token('insert', $iSurveyID);
+		$token = Token::create($iSurveyID);
 		$token->setAttributes($insertdata, false);
-        $result = $token->save() or safeDie($clang->gT("Error").": Failed to insert data[15]<br />");
+        $result = $token->save() or safeDie($clang->gT("Error").": " . print_r($token->errors, true));
 
         $results['tokens']++;
     }
@@ -4423,6 +4450,7 @@ function TSVImportSurvey($sFullFilepath)
     $handle = fopen($sFullFilepath, 'r');
     $bom = fread($handle, 2);
     rewind($handle);
+    $aAttributeList = questionAttributes();
 
     // Excel tends to save CSV as UTF-16, which PHP does not properly detect
     if($bom === chr(0xff).chr(0xfe)  || $bom === chr(0xfe).chr(0xff)){
@@ -4591,21 +4619,32 @@ function TSVImportSurvey($sFullFilepath)
                 // insert group
                 $insertdata = array();
                 $insertdata['sid'] = $iNewSID;
-                $gname = ((isset($row['name']) ? $row['name'] : 'G' . $gseq));
+                $gname = ((!empty($row['name']) ? $row['name'] : 'G' . $gseq));
+                $glang = (!empty($row['language']) ? $row['language'] : $baselang);
+                // when a multi-lang tsv-file without information on the group id/number (old style) is imported,
+                // we make up this information by giving a number 0..[numberofgroups-1] per language.
+                // the number and order of groups per language should be the same, so we can also import these files 
+                if ($lastglang!=$glang)    //reset couner on language change
+                {
+                    $iGroupcounter=0;
+                }
+                $lastglang=$glang;
+                //use group id/number from file. if missing, use an increasing number (s.a.)
+                $sGroupseq=(!empty($row['type/scale']) ? $row['type/scale'] : 'G'.$iGroupcounter++);
                 $insertdata['group_name'] = $gname;
                 $insertdata['grelevance'] = (isset($row['relevance']) ? $row['relevance'] : '');
                 $insertdata['description'] = (isset($row['text']) ? $row['text'] : '');
-                $insertdata['language'] = (isset($row['language']) ? $row['language'] : $baselang);
-                // For multi numeric survey : same title
-                if (isset($ginfo[$gname]))
+                $insertdata['language'] = $glang;
+
+                // For multi language survey: same gid/sort order across all languages
+                if (isset($ginfo[$sGroupseq]))
                 {
-                    $gseq = $ginfo[$gname]['group_order'];
-                    $gid = $ginfo[$gname]['gid'];
+                    $gid = $ginfo[$sGroupseq]['gid'];
                     $insertdata['gid'] = $gid;
-                    $insertdata['group_order'] = $gseq;
+                    $insertdata['group_order'] = $ginfo[$sGroupseq]['group_order'];
                 }
                 else
-                {
+                { 
                     $insertdata['group_order'] = $gseq;
                 }
                 $newgid = QuestionGroup::model()->insertRecords($insertdata);
@@ -4613,12 +4652,12 @@ function TSVImportSurvey($sFullFilepath)
                     $results['error'][] = $clang->gT("Error")." : ".$clang->gT("Failed to insert group").". ".$clang->gT("Text file row number ").$rownumber." (".$gname.")";
                     break;
                 }
-                if (!isset($ginfo[$gname]))
+                if (!isset($ginfo[$sGroupseq]))
                 {
                     $results['groups']++;
-                    $gid=$newgid; // save this for later
-                    $ginfo[$gname]['gid'] = $gid;
-                    $ginfo[$gname]['group_order'] = $gseq++;
+                    $gid=$newgid;
+                    $ginfo[$sGroupseq]['gid']=$gid;
+                    $ginfo[$sGroupseq]['group_order']=$gseq++;
                 }
                 $qseq=0;    // reset the question_order
                 break;
@@ -4694,7 +4733,15 @@ function TSVImportSurvey($sFullFilepath)
                             {
                                 $insertdata = array();
                                 $insertdata['qid'] = $qid;
-                                $insertdata['language'] = (isset($row['language']) ? $row['language'] : $baselang);
+                                // check if attribute is a i18n attribute. If yes, set language, else set language to null in attribute table
+                                if ($aAttributeList[$qtype][$key]['i18n']==1)
+                                {
+                                    $insertdata['language'] = (isset($row['language']) ? $row['language'] : $baselang);
+                                }
+                                else 
+                                {
+                                    $insertdata['language'] = NULL;
+                                }
                                 $insertdata['attribute'] = $key;
                                 $insertdata['value'] = $val;
                                 $result=QuestionAttribute::model()->insertRecords($insertdata);//
@@ -4766,7 +4813,7 @@ function TSVImportSurvey($sFullFilepath)
                     $insertdata['mandatory'] = (isset($row['mandatory']) ? $row['mandatory'] : '');
                     $insertdata['scale_id'] = $scale_id;
                     // For multi nueric language, qid is needed, why not gid. name is not unique.
-                    $fullsqname = "G{$gid}Q{$qid}_{$sqname}";
+                    $fullsqname = "G{$gid}Q{$qid}_{$scale_id}_{$sqname}";
                     if (isset($sqinfo[$fullsqname]))
                     {
                         $qseq = $sqinfo[$fullsqname]['question_order'];

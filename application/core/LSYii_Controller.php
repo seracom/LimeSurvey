@@ -92,7 +92,7 @@ abstract class LSYii_Controller extends CController
 			$dieoutput .= 'This script can only be run on PHP version 5.1.6 or later! Your version: '.PHP_VERSION.'<br />';
 
 		if (!function_exists('mb_convert_encoding'))
-			$dieoutput .= "This script needs the PHP Multibyte String Functions library installed: See <a href='http://docs.limesurvey.org/tiki-index.php?page=Installation+FAQ'>FAQ</a> and <a href='http://de.php.net/manual/en/ref.mbstring.php'>PHP documentation</a><br />";
+			$dieoutput .= "This script needs the PHP Multibyte String Functions library installed: See <a href='http://manual.limesurvey.org/wiki/Installation_FAQ'>FAQ</a> and <a href='http://de.php.net/manual/en/ref.mbstring.php'>PHP documentation</a><br />";
 
 		if ($dieoutput != '')
 			throw new CException($dieoutput);
@@ -143,4 +143,31 @@ abstract class LSYii_Controller extends CController
         Yii::app()->setConfig('adminimageurl', Yii::app()->getConfig('styleurl').Yii::app()->getConfig('admintheme').'/images/');
         Yii::app()->setConfig('adminstyleurl', Yii::app()->getConfig('styleurl').Yii::app()->getConfig('admintheme').'/');
 	}
+
+    /**
+     * Creates an absolute URL based on the given controller and action information.
+     * @param string $route the URL route. This should be in the format of 'ControllerID/ActionID'.
+     * @param array $params additional GET parameters (name=>value). Both the name and value will be URL-encoded.
+     * @param string $schema schema to use (e.g. http, https). If empty, the schema used for the current request will be used.
+     * @param string $ampersand the token separating name-value pairs in the URL.
+     * @return string the constructed URL
+     */
+    public function createAbsoluteUrl($route,$params=array(),$schema='',$ampersand='&')
+    {
+        $sPublicUrl=Yii::app()->getConfig("publicurl");
+        // Control if public url are really public : need scheme and host
+        // If yes: use it 
+        $aPublicUrl=parse_url($sPublicUrl);
+        if(isset($aPublicUrl['scheme']) && isset($aPublicUrl['host']))
+        {
+            $url=parent::createAbsoluteUrl($route,$params,$schema,$ampersand);
+            $sActualBaseUrl=Yii::app()->getBaseUrl(true);
+            if (substr($url, 0, strlen($sActualBaseUrl)) == $sActualBaseUrl) {
+                $url = substr($url, strlen($sActualBaseUrl));
+            }
+            return trim($sPublicUrl,"/").$url;
+        }
+        else 
+            return parent::createAbsoluteUrl($route,$params,$schema,$ampersand);
+    }
 }

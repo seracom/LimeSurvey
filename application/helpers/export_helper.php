@@ -54,11 +54,11 @@ function isNumericExtended($value)  {
 * @return string
 */
 function strSplitUnicode($str, $l = 0) {
-    if ($l > 0) 
+    if ($l > 0)
     {
         $ret = array();
         $len = mb_strlen($str, "UTF-8");
-        for ($i = 0; $i < $len; $i += $l) 
+        for ($i = 0; $i < $len; $i += $l)
         {
             $ret[] = mb_substr($str, $i, $l, "UTF-8");
         }
@@ -74,7 +74,7 @@ function strSplitUnicode($str, $l = 0) {
 * @param mixed $iLength Maximum text lenght data, usually 255 for SPSS <v16 and 16384 for SPSS 16 and later
 * @param mixed $na Value for N/A data
 * @param sep Quote separator. Use '\'' for SPSS, '"' for R
-* @param logical $header If TRUE, adds SQGA code as column headings (used by export to R) 
+* @param logical $header If TRUE, adds SQGA code as column headings (used by export to R)
 */
 function SPSSExportData ($iSurveyID, $iLength, $na = '', $q='\'', $header=FALSE) {
 
@@ -110,7 +110,7 @@ function SPSSExportData ($iSurveyID, $iLength, $na = '', $q='\'', $header=FALSE)
                     $i++;
                 }
                 echo("\n");
-            }            
+            }
         }
         $row = array_change_key_case($row,CASE_UPPER);
         //$row = $result->GetRowAssoc(true);    //Get assoc array, use uppercase
@@ -691,7 +691,7 @@ function surveyGetXMLStructure($iSurveyID, $xmlwriter, $exclude=array())
     //Question attributes
     $sBaseLanguage=Survey::model()->findByPk($iSurveyID)->language;
     $platform = Yii::app()->db->getDriverName();
-    if ($platform == 'mssql' || $platform =='sqlsrv')
+    if ($platform == 'mssql' || $platform =='sqlsrv' || $platform =='dblib')
     {
         $query="SELECT qa.qid, qa.attribute, cast(qa.value as varchar(4000)) as value, qa.language
         FROM {{question_attributes}} qa JOIN {{questions}}  q ON q.qid = qa.qid AND q.sid={$iSurveyID}
@@ -1344,7 +1344,8 @@ function quexml_export($surveyi, $quexmllan)
                     $question->appendChild($response);
                     break;
                 case "S": //SHORT FREE TEXT
-                    $response->appendChild(QueXMLCreateFree("text",quexml_get_lengthth($qid,"maximum_chars","240"),""));
+                    // default is fieldlength of 25 characters.
+                    $response->appendChild(QueXMLCreateFree("text",quexml_get_lengthth($qid,"maximum_chars","25"),""));
                     $question->appendChild($response);
                     break;
                 case "T": //LONG FREE TEXT
@@ -1398,10 +1399,22 @@ function quexml_export($surveyi, $quexmllan)
                 case "1": //Dualscale multi-flexi array
                     //select subQuestions from answers table where QID
                     quexml_create_subQuestions($question,$qid,$sgq);
+                    //get the header of the first scale of the dual scale question
+                    $Query = "SELECT value FROM {{question_attributes}} WHERE qid = $qid AND language='$quexmllang' AND attribute='dualscale_headerA'";
+                    $QRE = Yii::app()->db->createCommand($Query)->query();
+                    $QROW = $QRE->read();
                     $response = $dom->createElement("response");
+                    if ($QROW['value'])
+                        $response->setAttribute("varName",QueXMLCleanup($QROW['value']));
                     $response->appendChild(QueXMLCreateFixed($qid,false,false,0,$other,$sgq));
+                    
+                    //get the header of the second scale of the dual scale question
+                    $Query = "SELECT value FROM {{question_attributes}} WHERE qid = $qid AND language='$quexmllang' AND attribute='dualscale_headerB'";
+                    $QRE = Yii::app()->db->createCommand($Query)->query();
+                    $QROW = $QRE->read();
                     $response2 = $dom->createElement("response");
-                    $response2->setAttribute("varName",QueXMLCleanup($sgq) . "_2");
+                    if ($QROW['value'])
+                        $response2->setAttribute("varName",QueXMLCleanup($QROW['value']));
                     $response2->appendChild(QueXMLCreateFixed($qid,false,false,1,$other,$sgq));
                     $question->appendChild($response);
                     $question->appendChild($response2);
@@ -1414,15 +1427,15 @@ function quexml_export($surveyi, $quexmllan)
                         quexml_create_multi($question,$qid,$sgq,1);
                     else
                     {
-                        //get multiflexible_max - if set then make boxes of max this width
-                        $mcm = strlen(quexml_get_lengthth($qid,'multiflexible_max',1));
+                        //get multiflexible_max and maximum_chars - if set then make boxes of max of these widths
+                        $mcm = max(quexml_get_lengthth($qid,'maximum_chars',1), strlen(quexml_get_lengthth($qid,'multiflexible_max',1)));
                         quexml_create_multi($question,$qid,$sgq,1,array('f' => 'integer', 'len' => $mcm, 'lab' => ''));
                     }
                     break;
                 case ";": //multi-flexi array text
                     quexml_create_subQuestions($question,$qid,$sgq);
                     //foreach question where scale_id = 1 this is a textbox
-                    quexml_create_multi($question,$qid,$sgq,1,array('f' => 'text', 'len' => 10, 'lab' => ''));
+                    quexml_create_multi($question,$qid,$sgq,1,array('f' => 'text', 'len' => quexml_get_lengthth($qid,'maximum_chars',10), 'lab' => ''));
                     break;
                 case "^": //SLIDER CONTROL - not supported
                     $response->appendChild(QueXMLFixedArray(array("NOT SUPPORTED:$type" => 1)));
@@ -1482,7 +1495,7 @@ function group_export($action, $iSurveyID, $gid)
     header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
     header("Pragma: cache");                // HTTP/1.0
 
-    $xml->openUri('php://output');    
+    $xml->openUri('php://output');
     $xml->setIndent(true);
     $xml->startDocument('1.0', 'UTF-8');
     $xml->startElement('document');
@@ -1542,7 +1555,7 @@ function groupGetXMLStructure($xml,$gid)
     $iSurveyID=$iSurveyID['sid'];
     $sBaseLanguage=Survey::model()->findByPk($iSurveyID)->language;
     $platform = Yii::app()->db->getDriverName();
-    if ($platform == 'mssql' || $platform =='sqlsrv')
+    if ($platform == 'mssql' || $platform =='sqlsrv' || $platform =='dblib') 
     {
         $query="SELECT qa.qid, qa.attribute, cast(qa.value as varchar(4000)) as value, qa.language
         FROM {{question_attributes}} qa JOIN {{questions}}  q ON q.qid = qa.qid AND q.sid={$iSurveyID} and q.gid={$gid}
@@ -1634,7 +1647,7 @@ function questionGetXMLStructure($xml,$gid,$qid)
     $iSurveyID=$iSurveyID['sid'];
     $sBaseLanguage=Survey::model()->findByPk($iSurveyID)->language;
     $platform = Yii::app()->db->getDriverName();
-    if ($platform == 'mssql' || $platform =='sqlsrv')
+    if ($platform == 'mssql' || $platform =='sqlsrv'|| $platform =='dblib')
     {
         $query="SELECT qa.qid, qa.attribute, cast(qa.value as varchar(4000)) as value, qa.language
         FROM {{question_attributes}} qa JOIN {{questions}}  q ON q.qid = qa.qid AND q.sid={$iSurveyID} and q.qid={$qid}
@@ -1662,7 +1675,7 @@ function tokensExport($iSurveyID)
     $databasetype = Yii::app()->db->getDriverName();
     if (trim($_POST['filteremail'])!='')
     {
-        if (in_array($databasetype, array('mssql', 'sqlsrv')))
+        if (in_array($databasetype, array('mssql', 'sqlsrv', 'dblib')))
         {
             $bquery .= ' and CAST(email as varchar) like '.dbQuoteAll('%'.$_POST['filteremail'].'%', true);
         }
@@ -1779,7 +1792,7 @@ function tokensExport($iSurveyID)
 
     if (Yii::app()->request->getPost('tokendeleteexported') && !empty($aExportedTokens))
     {
-        Token::model(null, $iSurveyID)->deleteByPk($aExportedTokens);
+		Token::model($iSurveyID)->deleteByPk($aExportedTokens);
     }
 }
 

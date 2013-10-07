@@ -338,67 +338,7 @@ class remotecontrol_handle
 			return array('status' => 'Invalid Session key');
     }
 
-    /**
-     * RPC Routine to list the ids and info of surveys belonging to a user.
-     * Returns array of ids and info.
-     * If user is admin he can get surveys of every user (parameter sUser) or all surveys (sUser=null)
-     * Else only the syrveys belonging to the user requesting will be shown.
-     *
-     * @access public
-     * @param string $sSessionKey Auth credentials
-     * @param string $sUser Optional username to get list of surveys
-     * @return array The list of surveys
-     */
-	public function list_surveys($sSessionKey, $sUser=NULL)
-	{
-       if ($this->_checkSessionKey($sSessionKey))
-       {
-		   $sCurrentUser =  Yii::app()->session['user'];
-
-		   if( Permission::model()->hasGlobalPermission('superadmin','read') )
-		   {
-				if ($sUser == null)
-					$aUserSurveys = Survey::model()->findAll(); //list all surveys
-				else
-				{
-				   $aUserData = User::model()->findByAttributes(array('users_name' => $sUser));
-				   if (!isset($aUserData))
-						return array('status' => 'Invalid user');
-					else
-						$aUserSurveys = Survey::model()->findAllByAttributes(array("owner_id"=>$aUserData->attributes['uid']));
-				}
-			}
-			else
-			{
-				if (($sCurrentUser == $sUser) || ($sUser == null) )
-				{
-					$sUid =  User::model()->findByAttributes(array('users_name' => $sCurrentUser))->uid;
-					$aUserSurveys = Survey::model()->findAllByAttributes(array("owner_id"=>$sUid));
-				}
-				else
-					return array('status' => 'No permission');
-			}
-
-		   if(count($aUserSurveys)==0)
-				return array('status' => 'No surveys found');
-
-			foreach ($aUserSurveys as $oSurvey)
-				{
-				$oSurveyLanguageSettings = SurveyLanguageSetting::model()->findByAttributes(array('surveyls_survey_id' => $oSurvey->primaryKey, 'surveyls_language' => $oSurvey->language));
-				if (!isset($oSurveyLanguageSettings))
-					$aSurveyTitle = '';
-				else
-					$aSurveyTitle = $oSurveyLanguageSettings->attributes['surveyls_title'];
-				$aData[]= array('sid'=>$oSurvey->primaryKey,'surveyls_title'=>$aSurveyTitle,'startdate'=>$oSurvey->attributes['startdate'],'expires'=>$oSurvey->attributes['expires'],'active'=>$oSurvey->attributes['active']);
-				}
-			return $aData;
-        }
-        else
-			return array('status' => 'Invalid session key');
-	}
-
-
-
+    
     /**
      * RPC Routine that launches a newly created survey.
      *
@@ -588,7 +528,9 @@ class remotecontrol_handle
 				if(in_array($sStatName, $aPermittedTokenStats))
 				{
 					if (tableExists('{{tokens_' . $iSurveyID . '}}'))
-						$summary = Token::model(null, $iSurveyID)->summary();
+					{
+						$summary = Token::model($iSurveyID)->summary();
+					}
 					else
 						return array('status' => 'No available data');
 				}
@@ -1199,44 +1141,7 @@ class remotecontrol_handle
 			return array('status' => 'Invalid Session key');
     }
 
-    /**
-      * RPC Routine to return the ids and info of groups belonging to survey .
-      * Returns array of ids and info.
-      *
-      * @access public
-      * @param string $sSessionKey Auth credentials
-      * @param int $iSurveyID Id of the Survey containing the groups
-      * @return array The list of groups
-      */
-	public function list_groups($sSessionKey, $iSurveyID)
-	{
-       if ($this->_checkSessionKey($sSessionKey))
-       {
-			$oSurvey = Survey::model()->findByPk($iSurveyID);
-			if (!isset($oSurvey))
-				return array('status' => 'Error: Invalid survey ID');
-
-			if (Permission::model()->hasSurveyPermission($iSurveyID, 'survey', 'read'))
-			{
-				$oGroupList = QuestionGroup::model()->findAllByAttributes(array("sid"=>$iSurveyID));
-				if(count($oGroupList)==0)
-					return array('status' => 'No groups found');
-
-				foreach ($oGroupList as $oGroup)
-				{
-					$aData[]= array('id'=>$oGroup->primaryKey,'group_name'=>$oGroup->attributes['group_name']);
-				}
-				return $aData;
-			}
-			else
-				return array('status' => 'No permission');
-        }
-        else
-            return array('status' => 'Invalid Session Key');
-	}
-
-
-	/* Question specific functions */
+    /* Question specific functions */
 
 
     /**
@@ -1621,7 +1526,295 @@ class remotecontrol_handle
     }
 
 
+    
+
+	/* Participant-Token specific functions */
+
+
+
     /**
+     * RPC Routine to add participants to the tokens collection of the survey.
+     * Returns the inserted data including additional new information like the Token entry ID and the token string.
+     *
+     * @access public
+     * @param string $sSessionKey Auth credentials
+     * @param int $iSurveyID Id of the Survey
+     * @param struct $aParticipantData Data of the participants to be added
+     * @param bool Optional - Defaults to true and determins if the access token automatically created
+     * @return array The values added
+     */
+    public function add_participants($sSessionKey, $iSurveyID, $aParticipantData, $bCreateToken=true)
+    {
+        if (!$this->_checkSessionKey($sSessionKey)) return array('status' => 'Invalid session key');
+        $oSurvey=Survey::model()->findByPk($iSurveyID);
+        if (is_null($oSurvey))
+        {
+            return array('status' => 'Error: Invalid survey ID');
+        }
+
+        if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'create'))
+        {
+            if (!Yii::app()->db->schema->getTable('{{tokens_' . $iSurveyID . '}}'))
+                return array('status' => 'No token table');
+			$aDestinationFields = array_flip(Token::model($iSurveyID)->getMetaData()->tableSchema->columnNames);
+			foreach ($aParticipantData as &$aParticipant)
+            {
+                $token = Token::create($iSurveyID);
+                $token->setAttributes(array_intersect_key($aParticipant,$aDestinationFields));
+				if  ($bCreateToken)
+				{
+					$token->generateToken();
+				}
+				if ($token->save())
+				{
+					$aParticipant = $token->getAttributes();
+				}
+				else
+				{
+					$aParticipant["errors"] = $token->errors;
+				}
+            }
+            return $aParticipantData;
+        }
+        else
+            return array('status' => 'No permission');
+    }
+
+    /**
+     * RPC Routine to delete multiple participants of a Survey.
+     * Returns the id of the deleted token
+     *
+     * @access public
+     * @param string $sSessionKey Auth credentials
+     * @param int $iSurveyID Id of the Survey that the participants belong to
+     * @param array $aTokenIDs Id of the tokens/participants to delete
+     * @return array Result of deletion
+     */
+	public function delete_participants($sSessionKey, $iSurveyID, $aTokenIDs)
+	{
+        if ($this->_checkSessionKey($sSessionKey))
+        {
+			$iSurveyID = sanitize_int($iSurveyID);
+
+			$oSurvey = Survey::model()->findByPk($iSurveyID);
+			if (!isset($oSurvey))
+				return array('status' => 'Error: Invalid survey ID');
+
+			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'delete'))
+			{
+				if(!tableExists("{{tokens_$iSurveyID}}"))
+					return array('status' => 'Error: No token table');
+
+				$aResult=array();
+				foreach($aTokenIDs as $iTokenID)
+				{
+					$token = Token::model($iSurveyID)->findByPk($iTokenID);
+					if (!isset($token))
+						$aResult[$iTokenID]='Invalid token ID';
+					elseif($token->delete())
+						$aResult[$iTokenID]='Deleted';
+					else
+						$aResult[$iTokenID]='Deletion went wrong';
+				}
+				return $aResult;
+            }
+            else
+                return array('status' => 'No permission');
+        }
+        else
+            return array('status' => 'Invalid Session Key');
+	}
+
+
+    /**
+      * RPC Routine to return settings of a token/participant of a survey .
+      *
+      * @access public
+      * @param string $sSessionKey Auth credentials
+      * @param int $iSurveyID Id of the Survey to get token properties
+      * @param int $iTokenID Id of the participant to check
+      * @param array $aTokenProperties The properties to get
+      * @return array The requested values
+      */
+	public function get_participant_properties($sSessionKey, $iSurveyID, $iTokenID, $aTokenProperties)
+	{
+       if ($this->_checkSessionKey($sSessionKey))
+       {
+			$surveyidExists = Survey::model()->findByPk($iSurveyID);
+			if (!isset($surveyidExists))
+				return array('status' => 'Error: Invalid survey ID');
+
+			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'read'))
+			{
+				if(!tableExists("{{tokens_$iSurveyID}}"))
+					return array('status' => 'Error: No token table');
+
+				$token = Token::model($iSurveyID)->findByPk($iTokenID);
+				if (!isset($token))
+					return array('status' => 'Error: Invalid tokenid');
+
+				$result = array_intersect_key(array_flip($aTokenProperties), $token->attributes);
+                if (empty($result))
+				{
+					return array('status' => 'No valid Data');
+				}
+				else
+				{
+					return $result;
+				}
+
+                
+			}
+			else
+				return array('status' => 'No permission');
+        }
+        else
+            return array('status' => 'Invalid Session Key');
+	}
+
+    /**
+     * RPC Routine to set properties of a survey participant/token.
+     * Returns array
+     *
+     * @access public
+     * @param string $sSessionKey Auth credentials
+     * @param int $iSurveyID Id of the survey that participants belong
+     * @param int $iTokenID Id of the participant to alter
+     * @param array|struct $aTokenData Data to change
+     * @return array Result of the change action
+     */
+	public function set_participant_properties($sSessionKey, $iSurveyID, $iTokenID, $aTokenData)
+	{
+       if ($this->_checkSessionKey($sSessionKey))
+       {
+			$oSurvey = Survey::model()->findByPk($iSurveyID);
+			if (!isset($oSurvey))
+				return array('status' => 'Error: Invalid survey ID');
+
+			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'update'))
+			{
+				if(!tableExists("{{tokens_$iSurveyID}}"))
+					return array('status' => 'Error: No token table');
+
+				$oToken = Token::model($iSurveyID)->findByPk($iTokenID);
+				if (!isset($oToken))
+					return array('status' => 'Error: Invalid tokenid');
+
+				$aResult = array();
+				// Remove fields that may not be modified
+				unset($aTokenData['tid']);
+
+				$aBasicDestinationFields = array_flip($oToken->getTableSchema()->columnNames);
+				$aTokenData = array_intersect_key($aTokenData,$aBasicDestinationFields);
+
+				if (empty($aTokenData))
+					return array('status' => 'No valid Data');
+
+				$oToken->setAttributes($aTokenData, false);
+				if ($oToken->save())
+				{
+					return $oToken->attributes;
+				}
+			}
+			else
+				return array('status' => 'No permission');
+        }
+        else
+            return array('status' => 'Invalid Session Key');
+	}
+
+
+	/**
+      * RPC Routine to return the ids and info of groups belonging to survey .
+      * Returns array of ids and info.
+      *
+      * @access public
+      * @param string $sSessionKey Auth credentials
+      * @param int $iSurveyID Id of the Survey containing the groups
+      * @return array The list of groups
+      */
+	public function list_groups($sSessionKey, $iSurveyID)
+	{
+       if ($this->_checkSessionKey($sSessionKey))
+       {
+			$oSurvey = Survey::model()->findByPk($iSurveyID);
+			if (!isset($oSurvey))
+				return array('status' => 'Error: Invalid survey ID');
+
+			if (Permission::model()->hasSurveyPermission($iSurveyID, 'survey', 'read'))
+			{
+				$oGroupList = QuestionGroup::model()->findAllByAttributes(array("sid"=>$iSurveyID));
+				if(count($oGroupList)==0)
+					return array('status' => 'No groups found');
+
+				foreach ($oGroupList as $oGroup)
+				{
+					$aData[]= array('id'=>$oGroup->primaryKey,'group_name'=>$oGroup->attributes['group_name']);
+				}
+				return $aData;
+			}
+			else
+				return array('status' => 'No permission');
+        }
+        else
+            return array('status' => 'Invalid Session Key');
+	}
+
+   /**
+    * RPC Routine to return the ids and info  of token/participants of a survey.
+    * if $bUnused is true, user will get the list of not completed tokens (token_return functionality).
+    * Parameters iStart and ilimit are used to limit the number of results of this call.
+    *
+    * @access public
+    * @param string $sSessionKey Auth credentials
+    * @param int $iSurveyID Id of the survey to list participants
+    * @param int $iStart Start id of the token list
+    * @param int  $iLimit Number of participants to return
+    * @param bool $bUnused If you want unused tokensm, set true
+    * @return array The list of tokens
+    */
+	public function list_participants($sSessionKey, $iSurveyID, $iStart=0, $iLimit=10, $bUnused=false)
+	{
+       if ($this->_checkSessionKey($sSessionKey))
+       {
+			$oSurvey = Survey::model()->findByPk($iSurveyID);
+			if (!isset($oSurvey))
+				return array('status' => 'Error: Invalid survey ID');
+
+			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'read'))
+			{
+				if(!tableExists("{{tokens_$iSurveyID}}"))
+					return array('status' => 'Error: No token table');
+
+				if($bUnused)
+					$oTokens = Token::model($iSurveyID)->incomplete()->findAll(array('limit' => $iLimit, 'offset' => $iStart));
+				else
+					$oTokens = Token::model($iSurveyID)->findAll(array('limit' => $iLimit, 'offset' => $iStart));
+
+				if(count($oTokens)==0)
+					return array('status' => 'No Tokens found');
+
+				foreach ($oTokens as $token)
+					{
+						$aData[] = array(
+									'tid'=>$token->primarykey,
+									'token'=>$token->attributes['token'],
+									'participant_info'=>array(
+														'firstname'=>$token->attributes['firstname'],
+														'lastname'=>$token->attributes['lastname'],
+														'email'=>$token->attributes['email'],
+														    ));
+					}
+				return $aData;
+			}
+			else
+				return array('status' => 'No permission');
+        }
+        else
+            return array('status' => 'Invalid Session Key');
+	}
+
+	/**
      * RPC Routine to return the ids and info of questions of a survey/group.
      * Returns array of ids and info.
      *
@@ -1678,263 +1871,106 @@ class remotecontrol_handle
 			return array('status' => 'Invalid session key');
 	}
 
-	/* Participant-Token specific functions */
-
-
-
-    /**
-     * RPC Routine to add participants to the tokens collection of the survey.
-     * Returns the inserted data including additional new information like the Token entry ID and the token string.
+	/**
+     * RPC Routine to list the ids and info of surveys belonging to a user.
+     * Returns array of ids and info.
+     * If user is admin he can get surveys of every user (parameter sUser) or all surveys (sUser=null)
+     * Else only the syrveys belonging to the user requesting will be shown.
      *
      * @access public
      * @param string $sSessionKey Auth credentials
-     * @param int $iSurveyID Id of the Survey
-     * @param struct $aParticipantData Data of the participants to be added
-     * @param bool Optional - Defaults to true and determins if the access token automatically created
-     * @return array The values added
+     * @param string $sUser Optional username to get list of surveys
+     * @return array The list of surveys
      */
-    public function add_participants($sSessionKey, $iSurveyID, $aParticipantData, $bCreateToken=true)
-    {
-        if (!$this->_checkSessionKey($sSessionKey)) return array('status' => 'Invalid session key');
-        $oSurvey=Survey::model()->findByPk($iSurveyID);
-        if (is_null($oSurvey))
-        {
-            return array('status' => 'Error: Invalid survey ID');
-        }
+	public function list_surveys($sSessionKey, $sUser=NULL)
+	{
+       if ($this->_checkSessionKey($sSessionKey))
+       {
+		   $sCurrentUser =  Yii::app()->session['user'];
 
-        if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'create'))
-        {
-            if (!Yii::app()->db->schema->getTable('{{tokens_' . $iSurveyID . '}}'))
-                return array('status' => 'No token table');
-
-            $aDestinationFields = array_flip(Token::model(null, $iSurveyID)->getMetaData()->tableSchema->columnNames);
-			foreach ($aParticipantData as &$aParticipant)
-            {
-                $token = new Token('insert', $iSurveyID);
-                $token->setAttributes(array_intersect_key($aParticipant,$aDestinationFields), false);
-				if  ($bCreateToken)
-				{
-					$token->generateToken();
-				}
-				if ($token->save())
-				{
-					$aParticipant = $token->getAttributes();
-				}
+		   if( Permission::model()->hasGlobalPermission('superadmin','read') )
+		   {
+				if ($sUser == null)
+					$aUserSurveys = Survey::model()->findAll(); //list all surveys
 				else
 				{
-					$aParticipant = false;
-				}
-            }
-            return $aParticipantData;
-        }
-        else
-            return array('status' => 'No permission');
-    }
-
-    /**
-     * RPC Routine to delete multiple participants of a Survey.
-     * Returns the id of the deleted token
-     *
-     * @access public
-     * @param string $sSessionKey Auth credentials
-     * @param int $iSurveyID Id of the Survey that the participants belong to
-     * @param array $aTokenIDs Id of the tokens/participants to delete
-     * @return array Result of deletion
-     */
-	public function delete_participants($sSessionKey, $iSurveyID, $aTokenIDs)
-	{
-        if ($this->_checkSessionKey($sSessionKey))
-        {
-			$iSurveyID = sanitize_int($iSurveyID);
-
-			$oSurvey = Survey::model()->findByPk($iSurveyID);
-			if (!isset($oSurvey))
-				return array('status' => 'Error: Invalid survey ID');
-
-			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'delete'))
-			{
-				if(!tableExists("{{tokens_$iSurveyID}}"))
-					return array('status' => 'Error: No token table');
-
-				$aResult=array();
-				foreach($aTokenIDs as $iTokenID)
-				{
-					$token = Token::model(null, $iSurveyID)->findByPk($iTokenID);
-					if (!isset($token))
-						$aResult[$iTokenID]='Invalid token ID';
+				   $aUserData = User::model()->findByAttributes(array('users_name' => $sUser));
+				   if (!isset($aUserData))
+						return array('status' => 'Invalid user');
 					else
-					{
-					SurveyLink::deleteTokenLink(array($iTokenID), $iSurveyID);
-					if($token->delete())
-						$aResult[$iTokenID]='Deleted';
-					else
-						$aResult[$iTokenID]='Deletion went wrong';
-					}
-				}
-				return $aResult;
-            }
-            else
-                return array('status' => 'No permission');
-        }
-        else
-            return array('status' => 'Invalid Session Key');
-	}
-
-
-    /**
-      * RPC Routine to return settings of a token/participant of a survey .
-      *
-      * @access public
-      * @param string $sSessionKey Auth credentials
-      * @param int $iSurveyID Id of the Survey to get token properties
-      * @param int $iTokenID Id of the participant to check
-      * @param array $aTokenProperties The properties to get
-      * @return array The requested values
-      */
-	public function get_participant_properties($sSessionKey, $iSurveyID, $iTokenID, $aTokenProperties)
-	{
-       if ($this->_checkSessionKey($sSessionKey))
-       {
-			$surveyidExists = Survey::model()->findByPk($iSurveyID);
-			if (!isset($surveyidExists))
-				return array('status' => 'Error: Invalid survey ID');
-
-			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'read'))
-			{
-				if(!tableExists("{{tokens_$iSurveyID}}"))
-					return array('status' => 'Error: No token table');
-
-				$oToken = TokenDynamic::model($iSurveyID)->findByPk($iTokenID);
-				if (!isset($oToken))
-					return array('status' => 'Error: Invalid tokenid');
-
-                $aResult=array();
-                $aBasicDestinationFields=TokenDynamic::model()->tableSchema->columnNames;
-                $aTokenProperties=array_intersect($aTokenProperties,$aBasicDestinationFields);
-
-				if (empty($aTokenProperties))
-					return array('status' => 'No valid Data');
-
-                foreach($aTokenProperties as $sPropertyName )
-                {
-					$aResult[$sPropertyName]=$oToken->$sPropertyName;
-				}
-				return $aResult;
-			}
-			else
-				return array('status' => 'No permission');
-        }
-        else
-            return array('status' => 'Invalid Session Key');
-	}
-
-    /**
-     * RPC Routine to set properties of a survey participant/token.
-     * Returns array
-     *
-     * @access public
-     * @param string $sSessionKey Auth credentials
-     * @param int $iSurveyID Id of the survey that participants belong
-     * @param int $iTokenID Id of the participant to alter
-     * @param array|struct $aTokenData Data to change
-     * @return array Result of the change action
-     */
-	public function set_participant_properties($sSessionKey, $iSurveyID, $iTokenID, $aTokenData)
-	{
-       if ($this->_checkSessionKey($sSessionKey))
-       {
-			$oSurvey = Survey::model()->findByPk($iSurveyID);
-			if (!isset($oSurvey))
-				return array('status' => 'Error: Invalid survey ID');
-
-			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'update'))
-			{
-				if(!tableExists("{{tokens_$iSurveyID}}"))
-					return array('status' => 'Error: No token table');
-
-				$oToken = Token::model(null, $iSurveyID)->findByPk($iTokenID);
-				if (!isset($oToken))
-					return array('status' => 'Error: Invalid tokenid');
-
-				$aResult = array();
-				// Remove fields that may not be modified
-				unset($aTokenData['tid']);
-
-				$aBasicDestinationFields = array_flip($oToken->getTableSchema()->columnNames);
-				$aTokenData = array_intersect_key($aTokenData,$aBasicDestinationFields);
-
-				if (empty($aTokenData))
-					return array('status' => 'No valid Data');
-
-				$oToken->setAttributes($aTokenData, false);
-				if ($oToken->save())
-				{
-					return $oToken->attributes;
+						$aUserSurveys = Survey::model()->findAllByAttributes(array("owner_id"=>$aUserData->attributes['uid']));
 				}
 			}
 			else
-				return array('status' => 'No permission');
-        }
-        else
-            return array('status' => 'Invalid Session Key');
-	}
-
-
-
-   /**
-    * RPC Routine to return the ids and info  of token/participants of a survey.
-    * if $bUnused is true, user will get the list of not completed tokens (token_return functionality).
-    * Parameters iStart and ilimit are used to limit the number of results of this call.
-    *
-    * @access public
-    * @param string $sSessionKey Auth credentials
-    * @param int $iSurveyID Id of the survey to list participants
-    * @param int $iStart Start id of the token list
-    * @param int  $iLimit Number of participants to return
-    * @param bool $bUnused If you want unused tokensm, set true
-    * @return array The list of tokens
-    */
-	public function list_participants($sSessionKey, $iSurveyID, $iStart=0, $iLimit=10, $bUnused=false)
-	{
-       if ($this->_checkSessionKey($sSessionKey))
-       {
-			$oSurvey = Survey::model()->findByPk($iSurveyID);
-			if (!isset($oSurvey))
-				return array('status' => 'Error: Invalid survey ID');
-
-			if (Permission::model()->hasSurveyPermission($iSurveyID, 'tokens', 'read'))
 			{
-				if(!tableExists("{{tokens_$iSurveyID}}"))
-					return array('status' => 'Error: No token table');
-
-				if($bUnused)
-					$oTokens = Token::model(null, $iSurveyID)->incomplete()->findAll(array('limit' => $iLimit, 'offset' => $iStart));
+				if (($sCurrentUser == $sUser) || ($sUser == null) )
+				{
+					$sUid =  User::model()->findByAttributes(array('users_name' => $sCurrentUser))->uid;
+					$aUserSurveys = Survey::model()->findAllByAttributes(array("owner_id"=>$sUid));
+				}
 				else
-					$oTokens = Token::model(null, $iSurveyID)->findAll(array('limit' => $iLimit, 'offset' => $iStart));
-
-				if(count($oTokens)==0)
-					return array('status' => 'No Tokens found');
-
-				foreach ($oTokens as $token)
-					{
-						$aData[] = array(
-									'tid'=>$token->primarykey,
-									'token'=>$token->attributes['token'],
-									'participant_info'=>array(
-														'firstname'=>$token->attributes['firstname'],
-														'lastname'=>$token->attributes['lastname'],
-														'email'=>$token->attributes['email'],
-														    ));
-					}
-				return $aData;
+					return array('status' => 'No permission');
 			}
-			else
-				return array('status' => 'No permission');
+
+		   if(count($aUserSurveys)==0)
+				return array('status' => 'No surveys found');
+
+			foreach ($aUserSurveys as $oSurvey)
+				{
+				$oSurveyLanguageSettings = SurveyLanguageSetting::model()->findByAttributes(array('surveyls_survey_id' => $oSurvey->primaryKey, 'surveyls_language' => $oSurvey->language));
+				if (!isset($oSurveyLanguageSettings))
+					$aSurveyTitle = '';
+				else
+					$aSurveyTitle = $oSurveyLanguageSettings->attributes['surveyls_title'];
+				$aData[]= array('sid'=>$oSurvey->primaryKey,'surveyls_title'=>$aSurveyTitle,'startdate'=>$oSurvey->attributes['startdate'],'expires'=>$oSurvey->attributes['expires'],'active'=>$oSurvey->attributes['active']);
+				}
+			return $aData;
         }
         else
-            return array('status' => 'Invalid Session Key');
+			return array('status' => 'Invalid session key');
 	}
 
+	/**
+     * RPC Routine to list the ids and info of users.
+     * Returns array of ids and info.
+     * @param string $sSessionKey Auth credentials
+     * @return array The list of users
+     */
+
+	public function list_users($sSessionKey = null)
+	{
+		if ($this->_checkSessionKey($sSessionKey))
+		{
+			if( Permission::model()->hasGlobalPermission('superadmin','read') )
+			{
+				$users = User::model()->findAll();
+
+				 if(count($users)==0)
+					 return array('status' => 'No surveys found');
+
+				 foreach ($users as $user)
+				 {
+					 $attributes = $user->attributes;
+
+					 foreach ($user->permissions as $permission)
+					 {
+						 $attributes['permissions'][] = $permission->attributes;
+					 }
+					 unset($attributes['password']);
+					 $data[] = $attributes;
+				 }
+				 return $data;
+			}
+			else
+			{
+				return array('status' => 'Permission denied.');
+			}
+		}
+		else
+		{
+			return array('status' => 'Invalid session key');
+		}
+	}
     /**
      * RPC routine to to initialise the survey's collection of tokens where new participant tokens may be later added.
      *
@@ -2262,8 +2298,8 @@ class remotecontrol_handle
     {
         if (!$this->_checkSessionKey($sSessionKey)) return array('status' => 'Invalid session key');
         Yii::app()->loadHelper('admin/exportresults');
-        if (!tableExists('{{survey_' . $iSurveyID . '}}')) return array('status' => 'No Data');
-		if(!$maxId = SurveyDynamic::model($iSurveyID)->getMaxId()) return array('status' => 'No Data');
+        if (!tableExists('{{survey_' . $iSurveyID . '}}')) return array('status' => 'No Data, survey table does not exist.');
+		if(!$maxId = SurveyDynamic::model($iSurveyID)->getMaxId()) return array('status' => 'No Data, could not get max id.');
 
         if (!Permission::model()->hasSurveyPermission($iSurveyID, 'responses', 'export')) return array('status' => 'No permission');
         if (is_null($sLanguageCode)) $sLanguageCode=getBaseLanguageFromSurveyID($iSurveyID);

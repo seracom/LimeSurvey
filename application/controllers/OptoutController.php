@@ -70,7 +70,7 @@ class OptoutController extends LSYii_Controller {
         }
         else
         {
-            $tokenInstance = Token::model(null, $iSurveyID)->findByAttributes($sToken);
+            $tokenInstance = Token::model($iSurveyID)->findByAttributes($sToken);
 
             if (!isset($tokenInstance))
             {
@@ -153,7 +153,7 @@ class OptoutController extends LSYii_Controller {
         }
         else
         {
-            $tokenInstance = Token::model(null, $iSurveyID)->findByAttributes(array('token' => $sToken));
+            $tokenInstance = Token::model($iSurveyID)->findByAttributes(array('token' => $sToken));
             if (!isset($tokenInstance))
             {
                 $html = $clang->gT('You are not a participant in this survey.');

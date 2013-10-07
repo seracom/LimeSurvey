@@ -980,7 +980,7 @@ function do_5pointchoice($ia)
     $inputnames[]=$ia[1];
 
     if($aQuestionAttributes['slider_rating']==1){
-        Yii::app()->getClientScript()->registerCssFile('star-rating.css');
+        Yii::app()->getClientScript()->registerCssFile(Yii::app()->getConfig('publicstyleurl') . 'star-rating.css');
         Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('generalscripts')."star-rating.js");
         $answer .= "<script type='text/javascript'>\n"
         . "  <!--\n"
@@ -990,7 +990,7 @@ function do_5pointchoice($ia)
     }
 
     if($aQuestionAttributes['slider_rating']==2){
-        Yii::app()->getClientScript()->registerCssFile('slider-rating.css');
+        Yii::app()->getClientScript()->registerCssFile(Yii::app()->getConfig('publicstyleurl') . 'slider-rating.css');
         Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('generalscripts')."slider-rating.js");
         $answer .= "<script type='text/javascript'>\n"
         . " <!--\n"
@@ -1235,6 +1235,10 @@ function do_date($ia)
             Yii::app()->getClientScript()->registerScriptFile(App()->baseUrl . "/third_party/jqueryui/development-bundle/ui/i18n/jquery.ui.datepicker-{$clang->langcode}.js");
         }
 
+        //register timepicker extension
+        Yii::app()->getClientScript()->registerCssFile(Yii::app()->getConfig('third_party') . '/jquery-ui-timepicker-addon/jquery-ui-timepicker-addon.css');
+        Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('third_party')."/jquery-ui-timepicker-addon/jquery-ui-timepicker-addon.js");
+        
         // Format the date  for output
         if (trim($_SESSION['survey_'.Yii::app()->getConfig('surveyID')][$ia[1]])!='')
         {
@@ -1281,7 +1285,7 @@ function do_date($ia)
         $iLength=strlen($dateformatdetails['dateformat']);
 
         // HTML for date question using datepicker
-        $answer ="<p class='question answer-item text-item date-item'><label for='answer{$ia[1]}' class='hide label'>{$clang->gT('Date picker')}</label>
+        $answer="<p class='question answer-item text-item date-item'><label for='answer{$ia[1]}' class='hide label'>{$clang->gT('Date picker')}</label>
         <input class='popupdate' type=\"text\" size=\"{$iLength}\" name=\"{$ia[1]}\" title='".sprintf($clang->gT('Format: %s'),$dateformatdetails['dateformat'])."' id=\"answer{$ia[1]}\" value=\"$dateoutput\" maxlength=\"{$iLength}\" onkeypress=\"return goodchars(event,'".$goodchars."')\" onchange=\"$checkconditionFunction(this.value, this.name, this.type)\" />
         <input  type='hidden' name='dateformat{$ia[1]}' id='dateformat{$ia[1]}' value='{$dateformatdetails['jsdate']}'  />
         <input  type='hidden' name='datelanguage{$ia[1]}' id='datelanguage{$ia[1]}' value='{$clang->langcode}'  />
@@ -2080,6 +2084,12 @@ function do_ranking($ia)
     } else {
         $max_answers=$anscount;
     }
+    // Get the max number of line needed
+    if(ctype_digit($max_answers) && intval($max_answers)<$anscount){
+        $iMaxLine=$max_answers;
+    }else{
+        $iMaxLine=$anscount;
+    }
     if (trim($aQuestionAttributes["min_answers"])!='')
     {
         $min_answers=trim($aQuestionAttributes["min_answers"]);
@@ -2104,7 +2114,7 @@ function do_ranking($ia)
         if($i==1){
             $answer .=$clang->gT('First choice');
         }else{
-            $answer .=$clang->gT('Next choice');
+            $answer .=sprintf($clang->gT('Choice of rank %s'),$i);
         }
         $answer .= "</label>";
         $answer .= "<select name=\"{$myfname}\" id=\"answer{$myfname}\">\n";
@@ -2398,7 +2408,7 @@ function do_multiplechoice($ia)
         $answer .="<script type='text/javascript'>\n";
         $answer .="$('#answer{$myfname}cbox').css('visibility','');";
         $answer .="$('#answer{$myfname}').bind('keyup focusout',function(event){\n";
-        $answer .= " if ($.trim($(this).val()).length>0) { $(\"#answer{$myfname}cbox\").attr(\"checked\",true); } else { \$(\"#answer{$myfname}cbox\").attr(\"checked\",false); }; $(\"#java{$myfname}\").val($(this).val());LEMflagMandOther(\"$myfname\",$('#answer{$myfname}cbox').is(\":checked\")); $oth_checkconditionFunction(this.value, this.name, this.type); \n";
+        $answer .= " if ($.trim($(this).val()).length>0) { $(\"#answer{$myfname}cbox\").prop(\"checked\",true); } else { \$(\"#answer{$myfname}cbox\").prop(\"checked\",false); }; $(\"#java{$myfname}\").val($(this).val());LEMflagMandOther(\"$myfname\",$('#answer{$myfname}cbox').is(\":checked\")); $oth_checkconditionFunction(this.value, this.name, this.type); \n";
         $answer .="});\n";
         $answer .="$('#answer{$myfname}cbox').click(function(event){\n";
         $answer .= " //if (($(this)).is(':checked')) { $(\"#answer{$myfname}\").focus(); } else { $(\"#answer{$myfname}\").val('');{$checkconditionFunction}(\"\", \"{$myfname}\", \"text\"); }; return true;\n";
@@ -3272,7 +3282,7 @@ function do_multiplenumeric($ia)
     if($aQuestionAttributes['slider_layout']==1)
     {
         Yii::app()->getClientScript()->registerScriptFile(Yii::app()->getConfig('generalscripts')."numeric-slider.js");
-        Yii::app()->getClientScript()->registerCssFile("numeric-slider.css");
+        Yii::app()->getClientScript()->registerCssFile(Yii::app()->getConfig('publicstyleurl') . "numeric-slider.css");
         if ($slider_default != "")
         {
             $slider_startvalue = $slider_default;
@@ -3983,7 +3993,7 @@ function do_array_5point($ia)
     {
         $myfname = $ia[1].$ansrow['title'];
 
-        $answertext = dTexts__run($ansrow['question']);
+        $answertext = $ansrow['question'];
         if (strpos($answertext,'|')) {$answertext=substr($answertext,0,strpos($answertext,'|'));}
 
         /* Check if this item has not been answered: the 'notanswered' variable must be an array,
@@ -4019,7 +4029,7 @@ function do_array_5point($ia)
             $answer_t_content .= " onclick=\"$checkconditionFunction(this.value, this.name, this.type)\" />\n</td>\n";
         }
 
-        $answertext2 = dTexts__run($ansrow['question']);
+        $answertext2 = $ansrow['question'];
         if (strpos($answertext2,'|'))
         {
             $answertext2=substr($answertext2,strpos($answertext2,'|')+1);
@@ -4135,7 +4145,7 @@ function do_array_10point($ia)
     foreach ($aSubquestions as $ansrow)
     {
         $myfname = $ia[1].$ansrow['title'];
-        $answertext = dTexts__run($ansrow['question']);
+        $answertext = $ansrow['question'];
         /* Check if this item has not been answered: the 'notanswered' variable must be an array,
         containing a list of unanswered questions, the current question must be in the array,
         and there must be no answer available for the item in this session. */
@@ -4269,7 +4279,7 @@ function do_array_yesnouncertain($ia)
         foreach($aSubquestions as $ansrow)
         {
             $myfname = $ia[1].$ansrow['title'];
-            $answertext = dTexts__run($ansrow['question']);
+            $answertext = $ansrow['question'];
             /* Check if this item has not been answered: the 'notanswered' variable must be an array,
             containing a list of unanswered questions, the current question must be in the array,
             and there must be no answer available for the item in this session. */
@@ -4426,7 +4436,7 @@ function do_array_increasesamedecrease($ia)
     foreach($aSubquestions as $ansrow)
     {
         $myfname = $ia[1].$ansrow['title'];
-        $answertext = dTexts__run($ansrow['question']);
+        $answertext = $ansrow['question'];
         /* Check if this item has not been answered: the 'notanswered' variable must be an array,
         containing a list of unanswered questions, the current question must be in the array,
         and there must be no answer available for the item in this session. */
@@ -4625,7 +4635,7 @@ function do_array($ia)
                 }
             }
             $myfname = $ia[1].$ansrow['title'];
-            $answertext = dTexts__run($ansrow['question']);
+            $answertext = $ansrow['question'];
             $answertextsave=$answertext;
             if (strpos($answertext,'|'))
             {
@@ -5125,7 +5135,7 @@ function do_array_multitext($ia)
                 }
             }
             $myfname = $ia[1].$ansrow['title'];
-            $answertext = dTexts__run($ansrow['question']);
+            $answertext = $ansrow['question'];
             $answertextsave=$answertext;
             /* Check if this item has not been answered: the 'notanswered' variable must be an array,
             containing a list of unanswered questions, the current question must be in the array,
@@ -5453,7 +5463,7 @@ function do_array_multiflexi($ia)
                 }
             }
             $myfname = $ia[1].$ansrow['title'];
-            $answertext = dTexts__run($ansrow['question']);
+            $answertext = $ansrow['question'];
             $answertextsave=$answertext;
             /* Check if this item has not been answered: the 'notanswered' variable must be an array,
             containing a list of unanswered questions, the current question must be in the array,
@@ -5668,7 +5678,7 @@ function do_arraycolumns($ia)
             foreach ($aQuestions as $ansrow)
             {
                 $anscode[]=$ansrow['title'];
-                $answers[]=dTexts__run($ansrow['question']);
+                $answers[]=$ansrow['question'];
             }
             $trbc = '';
             $odd_even = '';
